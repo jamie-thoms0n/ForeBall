@@ -220,14 +220,14 @@
             <fieldset>
               <legend>Penalty</legend>
               <div class="penalty-grid">
-                <button class="secondary-action penalty-button" type="button" data-penalty-type="threeOffTee">3 off the tee</button>
-                <button class="secondary-action penalty-button" type="button" data-penalty-type="lostBall">Lost Ball</button>
-                <button class="secondary-action penalty-button" type="button" data-penalty-type="ob">OB</button>
-                <button class="secondary-action penalty-button" type="button" data-penalty-type="other">Other</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="threeOffTee" onclick="window.__penaltyChoiceClick && window.__penaltyChoiceClick('threeOffTee')">3 off the tee</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="lostBall" onclick="window.__penaltyChoiceClick && window.__penaltyChoiceClick('lostBall')">Lost Ball</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="ob" onclick="window.__penaltyChoiceClick && window.__penaltyChoiceClick('ob')">OB</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="other" onclick="window.__penaltyChoiceClick && window.__penaltyChoiceClick('other')">Other</button>
               </div>
               <div class="hidden" id="otherPenaltyWrap">
                 <label for="otherPenaltySelect">Penalty shots</label>
-                <select id="otherPenaltySelect">
+                <select id="otherPenaltySelect" onchange="window.__otherPenaltyChanged && window.__otherPenaltyChanged(this.value)">
                   <option value="">Select</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
@@ -248,12 +248,32 @@
         </section>
 
         <section id="analyticsView" class="view">
-          <div class="stats-grid" id="statsGrid"></div>
-          <div class="chart-panel"><h2>Score Over Time</h2><div class="chart-wrap"><canvas id="scoreTrendChart"></canvas></div></div>
-          <div class="chart-panel"><h2>Approach Accuracy</h2><div class="chart-wrap"><canvas id="approachChart"></canvas></div></div>
-          <div class="chart-panel"><h2>Putt Distance</h2><div class="chart-wrap"><canvas id="puttChart"></canvas></div></div>
-          <div class="chart-panel"><h2>Score vs GIR</h2><div class="chart-wrap"><canvas id="girCorrelationChart"></canvas></div></div>
-          <div class="chart-panel"><h2>Score vs 3-Putts</h2><div class="chart-wrap"><canvas id="threePuttCorrelationChart"></canvas></div></div>
+          <div class="panel analytics-toolbar">
+            <div class="analytics-filter-row">
+              <div>
+                <label for="analyticsRangeSelect">Range</label>
+                <select id="analyticsRangeSelect">
+                  <option value="last20" selected>Last 20 rounds</option>
+                  <option value="all">All time</option>
+                  <option value="ytd">YTD</option>
+                  <option value="calendarYear">Calendar year</option>
+                  <option value="threeMonths">3 Months</option>
+                  <option value="month">Month</option>
+                  <option value="week">Week</option>
+                </select>
+              </div>
+            </div>
+            <div class="analytics-subtabs" aria-label="Analytics sections">
+              <button class="analytics-subtab is-active" type="button" data-analytics-tab="overview">Overview</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="drivers">Scoring Drivers</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="ballStriking">Ball Striking</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="shortGame">Short Game</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="putting">Putting</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="trends">Trends</button>
+              <button class="analytics-subtab" type="button" data-analytics-tab="comparisons">Comparisons</button>
+            </div>
+          </div>
+          <div id="analyticsContent"></div>
         </section>
 
         <section id="roundsView" class="view">
@@ -268,6 +288,7 @@
                   <h2 id="roundDetailTitle">Round Overview</h2>
                   <p id="roundDetailMeta"></p>
                 </div>
+                <button class="secondary-action round-detail-stats" type="button" id="roundDetailStatsBtn" onclick="window.__roundDetailStatsClick && window.__roundDetailStatsClick(event)">View round</button>
                 <div class="round-detail-summary">
                   <strong id="roundDetailTotal">0</strong>
                   <span id="roundDetailRelative">E</span>
@@ -286,12 +307,6 @@
                   </thead>
                   <tbody id="roundDetailTableBody"></tbody>
                   <tfoot>
-                    <tr class="round-overview-stats-row">
-                      <td></td>
-                      <td></td>
-                      <td></td>
-                      <td class="table-score-cell"><button class="secondary-action round-detail-stats" type="button" id="roundDetailStatsBtn">View stats</button></td>
-                    </tr>
                     <tr class="round-overview-total-row">
                       <td>Total</td>
                       <td></td>
@@ -304,6 +319,45 @@
                       </td>
                     </tr>
                   </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div id="roundStatsSection" class="hidden">
+            <div class="panel round-detail-panel">
+              <div class="round-detail-header">
+                <button class="secondary-action round-detail-back" type="button" id="roundStatsBackBtn">Back</button>
+                <div>
+                  <h2 id="roundStatsTitle">Round Stats</h2>
+                  <p id="roundStatsMeta"></p>
+                </div>
+                <button class="secondary-action round-detail-stats" type="button" id="roundStatsViewRoundBtn">View round</button>
+                <div class="round-detail-summary">
+                  <strong id="roundStatsGross">0</strong>
+                  <span id="roundStatsRelative">E</span>
+                </div>
+              </div>
+
+              <div class="stats-grid round-stats-grid" id="roundStatsGrid"></div>
+
+              <div class="round-overview-table-wrap">
+                <table class="round-overview-table round-stats-table">
+                  <thead>
+                    <tr>
+                      <th>Hole</th>
+                      <th>Score</th>
+                      <th>Fairway</th>
+                      <th>Approach</th>
+                      <th>GIR</th>
+                      <th>Putts</th>
+                      <th>Putts &gt; 6ft</th>
+                      <th>Putts &lt;= 6ft</th>
+                      <th>Chips</th>
+                      <th>Bunker</th>
+                      <th>Penalties</th>
+                    </tr>
+                  </thead>
+                  <tbody id="roundStatsTableBody"></tbody>
                 </table>
               </div>
             </div>

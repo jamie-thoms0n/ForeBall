@@ -806,6 +806,91 @@ h2 {
   margin-bottom: 14px;
 }
 
+.analytics-toolbar {
+  display: grid;
+  gap: 14px;
+}
+
+.analytics-filter-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+}
+
+.analytics-filter-row > div {
+  width: min(220px, 100%);
+}
+
+.analytics-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-subtab {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 8px 14px;
+  font-weight: 800;
+}
+
+.analytics-subtab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.analytics-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.analytics-table-wrap {
+  overflow-x: auto;
+}
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.analytics-table th,
+.analytics-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.analytics-table th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.analytics-kicker {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.analytics-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+}
+
+.analytics-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .dashboard-hero {
   display: grid;
   gap: 14px;
@@ -893,7 +978,7 @@ canvas {
 
 .round-card .card-actions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr auto;
   gap: 8px;
   margin-top: 10px;
 }
@@ -909,7 +994,7 @@ canvas {
 
 .round-detail-header {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 12px;
   align-items: start;
 }
@@ -922,6 +1007,11 @@ canvas {
 .round-detail-back {
   width: auto;
   min-width: 72px;
+}
+
+.round-detail-stats {
+  width: auto;
+  min-width: 96px;
 }
 
 .round-detail-summary {
@@ -939,6 +1029,10 @@ canvas {
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 800;
+}
+
+.round-stats-grid {
+  margin-top: 16px;
 }
 
 .round-score-grid {
@@ -1003,14 +1097,13 @@ canvas {
 }
 
 .round-score-mark.is-double-bogey::before {
-  inset: 2px;
   border-color: var(--text);
+  border-width: 4px;
   border-radius: 4px;
 }
 
 .round-score-mark.is-double-bogey::after {
-  border-color: var(--text);
-  border-radius: 4px;
+  display: none;
 }
 
 .round-overview-table-wrap {
@@ -1047,13 +1140,14 @@ canvas {
   text-align: center;
 }
 
+.round-stats-table th,
+.round-stats-table td {
+  white-space: nowrap;
+}
+
 .table-score-cell {
   display: flex;
   justify-content: center;
-}
-
-.round-overview-stats-row td {
-  border-top: 1px solid var(--line);
 }
 
 .round-overview-total-row td {
@@ -1116,6 +1210,10 @@ canvas {
   }
 
   .round-detail-back {
+    grid-column: 1 / -1;
+  }
+
+  .round-detail-stats {
     grid-column: 1 / -1;
   }
 

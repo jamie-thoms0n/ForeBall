@@ -98,6 +98,9 @@ let charts = {};
 let pendingConfirmAction = null;
 let openRoundCardMenuId = null;
 let selectedRoundId = null;
+let editingCompletedRoundId = null;
+let analyticsRange = "last20";
+let analyticsTab = "overview";
 
 window.__menuClick = function menuClick(event) {
   toggleRoundMenu(event);
@@ -148,9 +151,21 @@ window.__otherBunkerChanged = function otherBunkerChanged(value) {
   handleOtherBunkerChange();
 };
 
+window.__penaltyChoiceClick = function penaltyChoiceClick(type) { handlePenaltySelect(type); };
+
+window.__otherPenaltyChanged = function otherPenaltyChanged(value) {
+  el.otherPenaltySelect.value = value;
+  handleOtherPenaltyChange();
+};
+
 window.__roundDetailBackClick = function roundDetailBackClick(event) {
   if (event) event.preventDefault();
   closeRoundDetail();
+};
+
+window.__roundDetailStatsClick = function roundDetailStatsClick(event) {
+  if (event) event.preventDefault();
+  if (selectedRoundId) editRound(selectedRoundId);
 };
 
 const el = {
@@ -200,7 +215,8 @@ const el = {
   nextHoleBtn: document.getElementById("nextHoleBtn"),
   dashboardStats: document.getElementById("dashboardStats"),
   dashboardRecent: document.getElementById("dashboardRecent"),
-  statsGrid: document.getElementById("statsGrid"),
+  analyticsRangeSelect: document.getElementById("analyticsRangeSelect"),
+  analyticsContent: document.getElementById("analyticsContent"),
   roundList: document.getElementById("roundList"),
   roundListSection: document.getElementById("roundListSection"),
   roundDetailSection: document.getElementById("roundDetailSection"),
@@ -215,6 +231,15 @@ const el = {
   roundDetailFooterRelative: document.getElementById("roundDetailFooterRelative"),
   roundScoreGrid: document.getElementById("roundScoreGrid"),
   roundDetailTableBody: document.getElementById("roundDetailTableBody"),
+  roundStatsSection: document.getElementById("roundStatsSection"),
+  roundStatsBackBtn: document.getElementById("roundStatsBackBtn"),
+  roundStatsTitle: document.getElementById("roundStatsTitle"),
+  roundStatsMeta: document.getElementById("roundStatsMeta"),
+  roundStatsViewRoundBtn: document.getElementById("roundStatsViewRoundBtn"),
+  roundStatsGross: document.getElementById("roundStatsGross"),
+  roundStatsRelative: document.getElementById("roundStatsRelative"),
+  roundStatsGrid: document.getElementById("roundStatsGrid"),
+  roundStatsTableBody: document.getElementById("roundStatsTableBody"),
   confirmModal: document.getElementById("confirmModal"),
   confirmModalTitle: document.getElementById("confirmModalTitle"),
   confirmModalMessage: document.getElementById("confirmModalMessage"),
@@ -252,6 +277,16 @@ function bindEvents() {
   el.brandHomeBtn.addEventListener("click", () => setView("dashboard"));
   document.querySelectorAll("[data-dashboard-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.dashboardView));
+  });
+  document.querySelectorAll("[data-analytics-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      analyticsTab = button.dataset.analyticsTab;
+      renderAnalytics();
+    });
+  });
+  el.analyticsRangeSelect.addEventListener("change", () => {
+    analyticsRange = el.analyticsRangeSelect.value;
+    renderAnalytics();
   });
 
   document.querySelectorAll("[data-step]").forEach((button) => {
@@ -326,6 +361,10 @@ function bindEvents() {
   el.roundDetailStatsBtn.addEventListener("click", () => {
     if (selectedRoundId) editRound(selectedRoundId);
   });
+  el.roundStatsBackBtn.addEventListener("click", closeRoundStats);
+  el.roundStatsViewRoundBtn.addEventListener("click", () => {
+    if (selectedRoundId) openRoundDetail(selectedRoundId);
+  });
 }
 
 function populateCourses() {
@@ -334,6 +373,7 @@ function populateCourses() {
 
 function startRound() {
   const course = COURSES.find((item) => item.name === el.courseSelect.value);
+  editingCompletedRoundId = null;
   activeRound = createRoundState(course);
   currentHoleIndex = 0;
   persistActiveRound();
@@ -461,8 +501,10 @@ function completeRound() {
   finalizeRemainingHoles();
   const completed = { ...activeRound };
   delete completed.currentHoleIndex;
-  rounds = rounds.filter((round) => round.id !== completed.id).concat(normalizeRound(completed));
+  const completedRound = normalizeRound(completed);
+  rounds = rounds.filter((round) => round.id !== completed.id).concat(completedRound);
   saveRounds();
+  editingCompletedRoundId = null;
   activeRound = null;
   localStorage.removeItem(STORAGE_KEYS.activeRound);
   currentHoleIndex = 0;
@@ -473,16 +515,17 @@ function completeRound() {
   renderAnalytics();
   renderRounds();
   setView("rounds");
+  openRoundDetail(completedRound.id);
 }
 
 function editRound(roundId) {
   const round = rounds.find((item) => item.id === roundId);
   if (!round) return;
+  editingCompletedRoundId = roundId;
   activeRound = normalizeRound({ ...round, currentHoleIndex: 0 });
-  rounds = rounds.filter((item) => item.id !== roundId);
-  saveRounds();
+  localStorage.removeItem(STORAGE_KEYS.activeRound);
   currentHoleIndex = 0;
-  persistActiveRound();
+  updateResumeButton();
   renderDashboard();
   setView("scorecard");
   showHole();
@@ -717,6 +760,7 @@ function restartActiveRound() {
 }
 
 function cancelActiveRound() {
+  editingCompletedRoundId = null;
   activeRound = null;
   currentHoleIndex = 0;
   localStorage.removeItem(STORAGE_KEYS.activeRound);
@@ -953,7 +997,7 @@ function renderDashboard() {
   const scoredRounds = rounds.filter(hasRoundScore);
   const recent7 = countRoundsSince(7);
   const recent30 = countRoundsSince(30);
-  const activeRoundLabel = activeRound ? `${activeRound.course} · Hole ${currentHoleIndex + 1}` : "None";
+  const activeRoundLabel = activeRound && !editingCompletedRoundId ? `${activeRound.course} · Hole ${currentHoleIndex + 1}` : "None";
 
   el.dashboardStats.innerHTML = [
     ["Completed rounds", rounds.length],
@@ -983,60 +1027,275 @@ function renderDashboard() {
 }
 
 function renderAnalytics() {
-  const stats = calculateStats(rounds);
-  el.statsGrid.innerHTML = [
-    ["Rounds", rounds.length],
-    ["Scoring Avg", stats.scoringAverage],
-    ["Fairway", `${stats.fairwayPct}%`],
-    ["GIR", `${stats.girPct}%`],
-    ["Putts/Round", stats.puttsPerRound],
-    ["3-Putt Rate", `${stats.threePuttPct}%`]
-  ]
-    .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`)
-    .join("");
-
-  drawChart("scoreTrendChart", "line", rounds.filter(hasRoundScore).map((round) => round.date), rounds.filter(hasRoundScore).map(totalScore), "Score");
-  drawChart("approachChart", "bar", stats.approachBuckets.map((item) => item.label), stats.approachBuckets.map((item) => item.hitPct), "Hit %");
-  drawChart("puttChart", "bar", stats.puttBuckets.map((item) => item.label), stats.puttBuckets.map((item) => item.avgPutts), "Avg putts");
-  drawScatter(
-    "girCorrelationChart",
-    rounds.filter(hasRoundScore).map((round) => ({ x: girCount(round), y: totalScore(round) })),
-    "GIR",
-    "Score"
-  );
-  drawScatter(
-    "threePuttCorrelationChart",
-    rounds.filter(hasRoundScore).map((round) => ({ x: threePuttCount(round), y: totalScore(round) })),
-    "3-putts",
-    "Score"
-  );
+  updateAnalyticsUi();
+  destroyAnalyticsCharts();
+  const filteredRounds = getAnalyticsRounds();
+  const roundMetrics = filteredRounds.map(buildRoundMetrics);
+  if (!filteredRounds.length) {
+    el.analyticsContent.innerHTML = `<div class="panel"><h2>No data for this range</h2><p class="analytics-note">Try a wider range or add more completed rounds.</p></div>`;
+    return;
+  }
+  if (analyticsTab === "overview") renderAnalyticsOverview(filteredRounds, roundMetrics);
+  if (analyticsTab === "drivers") renderAnalyticsDrivers(filteredRounds, roundMetrics);
+  if (analyticsTab === "ballStriking") renderAnalyticsBallStriking(filteredRounds, roundMetrics);
+  if (analyticsTab === "shortGame") renderAnalyticsShortGame(filteredRounds, roundMetrics);
+  if (analyticsTab === "putting") renderAnalyticsPutting(filteredRounds, roundMetrics);
+  if (analyticsTab === "trends") renderAnalyticsTrends(filteredRounds, roundMetrics);
+  if (analyticsTab === "comparisons") renderAnalyticsComparisons(filteredRounds, roundMetrics);
 }
 
-function calculateStats(sourceRounds) {
-  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
-  const scoredRounds = sourceRounds.filter(hasRoundScore);
-  const roundsWithPutts = sourceRounds.filter((round) => round.holes.some((hole) => hole.putts !== null));
+function updateAnalyticsUi() {
+  el.analyticsRangeSelect.value = analyticsRange;
+  document.querySelectorAll("[data-analytics-tab]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.analyticsTab === analyticsTab);
+  });
+}
+
+function destroyAnalyticsCharts() {
+  Object.keys(charts).forEach((id) => {
+    if (id !== "dashboardScoreChart") {
+      charts[id].destroy();
+      delete charts[id];
+    }
+  });
+}
+
+function getAnalyticsRounds() {
+  const sorted = rounds.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const now = new Date();
+  if (analyticsRange === "last20") return sorted.slice(-20);
+  if (analyticsRange === "all") return sorted;
+  const cutoff = new Date(now);
+  if (analyticsRange === "ytd" || analyticsRange === "calendarYear") {
+    return sorted.filter((round) => new Date(round.date).getFullYear() === now.getFullYear());
+  }
+  if (analyticsRange === "threeMonths") cutoff.setMonth(cutoff.getMonth() - 3);
+  if (analyticsRange === "month") cutoff.setMonth(cutoff.getMonth() - 1);
+  if (analyticsRange === "week") cutoff.setDate(cutoff.getDate() - 7);
+  return sorted.filter((round) => new Date(round.date) >= cutoff);
+}
+
+function buildRoundMetrics(round) {
+  const holes = round.holes.map(normalizeHole);
   const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
   const girHoles = holes.filter((hole) => hole.gir !== null);
+  const approachHoles = holes.filter((hole) => hole.approachHit !== null);
   const puttHoles = holes.filter((hole) => hole.putts !== null);
-  const puttTotal = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
-  const threePutts = puttHoles.filter((hole) => hole.putts >= 3).length;
-
+  const firstPuttDistances = holes.map((hole) => hole.puttDistances?.[0]).filter((value) => typeof value === "number");
+  const chipTypes = holes.flatMap((hole) => hole.chipTypes || []);
+  const missedGir = holes.filter((hole) => hole.gir === false);
+  const score = totalScore(round);
   return {
-    scoringAverage: average(scoredRounds.map(totalScore)).toFixed(1),
-    fairwayPct: pct(fairwayHoles.filter((hole) => hole.fairway).length, fairwayHoles.length),
+    round,
+    score,
+    overPar: score - totalPar(round),
     girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
-    puttsPerRound: roundsWithPutts.length ? (puttTotal / roundsWithPutts.length).toFixed(1) : "0.0",
-    threePuttPct: pct(threePutts, puttHoles.length),
-    approachBuckets: APPROACH_BUCKETS.map((bucket) => {
-      const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket) && hole.approachHit !== null);
-      return { label: bucket.label, hitPct: pct(bucketHoles.filter((hole) => hole.approachHit).length, bucketHoles.length) };
-    }),
-    puttBuckets: PUTT_BUCKETS.map((bucket) => {
-      const bucketHoles = holes.filter((hole) => inBucket(hole.puttDistances?.[0], bucket) && hole.putts !== null);
-      return { label: bucket.label, avgPutts: Number(average(bucketHoles.map((hole) => hole.putts)).toFixed(1)) };
-    })
+    firPct: pct(fairwayHoles.filter((hole) => hole.fairway).length, fairwayHoles.length),
+    approachHitPct: pct(approachHoles.filter((hole) => hole.approachHit).length, approachHoles.length),
+    girCount: girCount(round),
+    firCount: fairwayHoles.filter((hole) => hole.fairway).length,
+    puttsTotal: puttHoles.reduce((sum, hole) => sum + hole.putts, 0),
+    avgPutts: average(puttHoles.map((hole) => hole.putts)),
+    threePutts: puttHoles.filter((hole) => hole.putts >= 3).length,
+    puttsOver6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "over"), 0),
+    puttsUnder6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "under"), 0),
+    firstPuttDistance: average(firstPuttDistances),
+    chipsTotal: holes.reduce((sum, hole) => sum + (hole.chips || 0), 0),
+    bunkerTotal: holes.reduce((sum, hole) => sum + (hole.greensideBunker || 0), 0),
+    penaltiesTotal: holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0),
+    avgApproachDistance: average(holes.map((hole) => hole.approachDistance)),
+    scramblePct: pct(missedGir.filter((hole) => hole.score !== null && hole.score <= hole.par).length, missedGir.length),
+    chipRegular: chipTypes.filter((type) => type === "regular").length,
+    chipBumpRun: chipTypes.filter((type) => type === "bumpRun").length,
+    chipFlop: chipTypes.filter((type) => type === "flop").length,
+    chipHighObstacle: chipTypes.filter((type) => type === "highObstacle").length,
+    chipRough: chipTypes.filter((type) => type === "rough").length,
+    chipBank: chipTypes.filter((type) => type === "bank").length,
+    chipPutter: chipTypes.filter((type) => type === "putter").length,
+    avgPar3: average(holes.filter((hole) => hole.par === 3).map((hole) => hole.score)),
+    avgPar4: average(holes.filter((hole) => hole.par === 4).map((hole) => hole.score)),
+    avgPar5: average(holes.filter((hole) => hole.par === 5).map((hole) => hole.score))
   };
+}
+
+function renderAnalyticsOverview(filteredRounds, roundMetrics) {
+  const overview = {
+    scoreAvg: average(roundMetrics.map((item) => item.score)).toFixed(1),
+    girPct: pct(sum(roundMetrics.map((item) => item.girCount)), sum(roundMetrics.map((item) => item.round.holes.filter((hole) => hole.gir !== null).length))),
+    firPct: pct(sum(roundMetrics.map((item) => item.firCount)), sum(roundMetrics.map((item) => item.round.holes.filter((hole) => hole.fairway !== null).length))),
+    puttsAvg: average(roundMetrics.map((item) => item.puttsTotal)).toFixed(1),
+    penaltiesAvg: average(roundMetrics.map((item) => item.penaltiesTotal)).toFixed(1),
+    scramblePct: Math.round(average(roundMetrics.map((item) => item.scramblePct)))
+  };
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Rounds", filteredRounds.length],
+          ["Scoring Avg", overview.scoreAvg],
+          ["FIR %", `${overview.firPct}%`],
+          ["GIR %", `${overview.girPct}%`],
+          ["Avg Putts", overview.puttsAvg],
+          ["Penalties/Round", overview.penaltiesAvg],
+          ["Scrambling %", `${overview.scramblePct}%`],
+          ["Best Score", Math.min(...roundMetrics.map((item) => item.score))]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Score Over Time</h2><span class="analytics-kicker">${filterLabel()}</span></div><div class="chart-wrap"><canvas id="analyticsOverviewScoreChart"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Core Performance Trends</h2><span class="analytics-note">FIR %, GIR %, and approach hit % by round</span></div><div class="chart-wrap"><canvas id="analyticsOverviewCoreChart"></canvas></div></div>
+      <div class="panel"><div class="analytics-section-header"><h2>Approach Distance Buckets</h2><span class="analytics-note">How scoring and hit rate change by yardage</span></div>${renderApproachBucketTable(filteredRounds)}</div>
+    </div>
+  `;
+  drawChart("analyticsOverviewScoreChart", "line", filteredRounds.map((round) => round.date), roundMetrics.map((item) => item.score), "Score");
+  drawMultiLineChart("analyticsOverviewCoreChart", filteredRounds.map((round) => round.date), [
+    { label: "FIR %", data: roundMetrics.map((item) => item.firPct), color: "#041d4d" },
+    { label: "GIR %", data: roundMetrics.map((item) => item.girPct), color: "#63d11f" },
+    { label: "Approach Hit %", data: roundMetrics.map((item) => item.approachHitPct), color: "#8aa2d3" }
+  ], "%");
+}
+
+function renderAnalyticsDrivers(filteredRounds, roundMetrics) {
+  const rows = buildCorrelationRows(roundMetrics);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Score Correlations</h2><span class="analytics-note">Google Sheets style CORREL coefficient against total score</span></div>
+        ${renderCorrelationTable(rows)}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Strongest Relationships</h2><span class="analytics-note">Ranked by absolute correlation to score</span></div><div class="chart-wrap"><canvas id="analyticsDriversChart"></canvas></div></div>
+    </div>
+  `;
+  const topRows = rows.slice(0, 10);
+  drawBarChart("analyticsDriversChart", topRows.map((row) => row.label), topRows.map((row) => row.coeff), "Correlation");
+}
+
+function renderAnalyticsBallStriking(filteredRounds, roundMetrics) {
+  const fairwayMissSeries = buildMissTrendSeries(filteredRounds, "fairway");
+  const approachMissSeries = buildMissTrendSeries(filteredRounds, "approach");
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["FIR %", `${pct(sum(roundMetrics.map((item) => item.firCount)), sum(filteredRounds.map((round) => round.holes.filter((hole) => hole.fairway !== null).length)))}%`],
+          ["GIR %", `${pct(sum(roundMetrics.map((item) => item.girCount)), sum(filteredRounds.map((round) => round.holes.filter((hole) => hole.gir !== null).length)))}%`],
+          ["Approach Hit %", `${Math.round(average(roundMetrics.map((item) => item.approachHitPct)))}%`],
+          ["Avg Approach Yds", average(roundMetrics.map((item) => item.avgApproachDistance)).toFixed(0)]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Ball Striking Trends</h2><span class="analytics-note">FIR %, GIR %, and approach hit % over time</span></div><div class="chart-wrap"><canvas id="analyticsBallStrikingTrend"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Fairway Misses Over Time</h2><span class="analytics-note">Per-round miss counts by type</span></div><div class="chart-wrap"><canvas id="analyticsFairwayMissTrend"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Approach Misses Over Time</h2><span class="analytics-note">Per-round miss counts by type</span></div><div class="chart-wrap"><canvas id="analyticsApproachMissTrend"></canvas></div></div>
+      <div class="panel"><div class="analytics-section-header"><h2>Fairway Miss Pattern</h2><span class="analytics-note">Where tee shots are missing</span></div>${renderMissBreakdownTable(filteredRounds, "fairway")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Approach Miss Pattern</h2><span class="analytics-note">Where approach shots are missing</span></div>${renderMissBreakdownTable(filteredRounds, "approach")}</div>
+    </div>
+  `;
+  drawMultiLineChart("analyticsBallStrikingTrend", filteredRounds.map((round) => round.date), [
+    { label: "FIR %", data: roundMetrics.map((item) => item.firPct), color: "#041d4d" },
+    { label: "GIR %", data: roundMetrics.map((item) => item.girPct), color: "#63d11f" },
+    { label: "Approach Hit %", data: roundMetrics.map((item) => item.approachHitPct), color: "#8aa2d3" }
+  ], "%");
+  drawMultiLineChart("analyticsFairwayMissTrend", filteredRounds.map((round) => round.date), fairwayMissSeries, "Misses");
+  drawMultiLineChart("analyticsApproachMissTrend", filteredRounds.map((round) => round.date), approachMissSeries, "Misses");
+}
+
+function renderAnalyticsShortGame(filteredRounds, roundMetrics) {
+  const chipSummary = chipTypeSummary(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Scrambling %", `${Math.round(average(roundMetrics.map((item) => item.scramblePct)))}%`],
+          ["Chips/Round", average(roundMetrics.map((item) => item.chipsTotal)).toFixed(1)],
+          ["Bunker/Round", average(roundMetrics.map((item) => item.bunkerTotal)).toFixed(1)],
+          ["Penalties/Round", average(roundMetrics.map((item) => item.penaltiesTotal)).toFixed(1)]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Short Game Over Time</h2><span class="analytics-note">Chips, bunker shots, and penalties per round</span></div><div class="chart-wrap"><canvas id="analyticsShortGameTrend"></canvas></div></div>
+      <div class="panel"><div class="analytics-section-header"><h2>Chip Type Mix</h2><span class="analytics-note">Usage and scoring context by chip type</span></div>${renderChipTypeTable(chipSummary)}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Recovery on Missed GIR</h2><span class="analytics-note">How you score when the green is missed</span></div>${renderRecoveryTable(filteredRounds)}</div>
+    </div>
+  `;
+  drawMultiLineChart("analyticsShortGameTrend", filteredRounds.map((round) => round.date), [
+    { label: "Chips", data: roundMetrics.map((item) => item.chipsTotal), color: "#041d4d" },
+    { label: "Bunker", data: roundMetrics.map((item) => item.bunkerTotal), color: "#63d11f" },
+    { label: "Penalties", data: roundMetrics.map((item) => item.penaltiesTotal), color: "#8aa2d3" }
+  ], "Count");
+}
+
+function renderAnalyticsPutting(filteredRounds, roundMetrics) {
+  const puttBuckets = buildPuttBucketTable(filteredRounds);
+  const puttHoles = filteredRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.putts !== null);
+  const onePutts = puttHoles.filter((hole) => hole.putts === 1).length;
+  const twoPutts = puttHoles.filter((hole) => hole.putts === 2).length;
+  const threePutts = puttHoles.filter((hole) => hole.putts >= 3).length;
+  const firstPuttDistance = average(filteredRounds.flatMap((round) => round.holes.map((hole) => hole.puttDistances?.[0])));
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Avg Putts", average(roundMetrics.map((item) => item.puttsTotal)).toFixed(1)],
+          ["Total Putts", sum(roundMetrics.map((item) => item.puttsTotal))],
+          ["1-Putt %", `${pct(onePutts, puttHoles.length)}%`],
+          ["2-Putt %", `${pct(twoPutts, puttHoles.length)}%`],
+          ["3-Putt %", `${pct(threePutts, puttHoles.length)}%`],
+          ["Avg 1st Putt Ft", firstPuttDistance.toFixed(1)]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Putting Trends</h2><span class="analytics-note">Total putts and distance split over time</span></div><div class="chart-wrap"><canvas id="analyticsPuttingTrend"></canvas></div></div>
+      <div class="panel"><div class="analytics-section-header"><h2>First-Putt Distance Buckets</h2><span class="analytics-note">Expected putts by opening putt distance</span></div>${renderPuttBucketTable(puttBuckets)}</div>
+    </div>
+  `;
+  drawMultiLineChart("analyticsPuttingTrend", filteredRounds.map((round) => round.date), [
+    { label: "Total Putts", data: roundMetrics.map((item) => item.puttsTotal), color: "#041d4d" },
+    { label: "Putts > 6ft", data: roundMetrics.map((item) => item.puttsOver6), color: "#63d11f" },
+    { label: "Putts <= 6ft", data: roundMetrics.map((item) => item.puttsUnder6), color: "#8aa2d3" }
+  ], "Count");
+}
+
+function renderAnalyticsTrends(filteredRounds, roundMetrics) {
+  const rollingScore = rollingAverage(roundMetrics.map((item) => item.score), 3);
+  const rollingGir = rollingAverage(roundMetrics.map((item) => item.girPct), 5);
+  const rollingFir = rollingAverage(roundMetrics.map((item) => item.firPct), 5);
+  const rollingPutts = rollingAverage(roundMetrics.map((item) => item.puttsTotal), 5);
+  const recentDelta = compareRecentVsPrevious(roundMetrics);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Score Δ", recentDelta.score],
+          ["GIR Δ", recentDelta.girPct],
+          ["FIR Δ", recentDelta.firPct],
+          ["Putts Δ", recentDelta.putts],
+          ["Penalties Δ", recentDelta.penalties],
+          ["Scramble Δ", recentDelta.scramble]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Score Trend</h2><span class="analytics-note">3-round rolling average</span></div><div class="chart-wrap"><canvas id="analyticsTrendScore"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Skill Trends</h2><span class="analytics-note">5-round rolling GIR, FIR, and putts</span></div><div class="chart-wrap"><canvas id="analyticsTrendSkills"></canvas></div></div>
+    </div>
+  `;
+  drawMultiLineChart("analyticsTrendScore", filteredRounds.map((round) => round.date), [
+    { label: "Score", data: rollingScore, color: "#041d4d" }
+  ], "Score");
+  drawMultiLineChart("analyticsTrendSkills", filteredRounds.map((round) => round.date), [
+    { label: "GIR %", data: rollingGir, color: "#63d11f" },
+    { label: "FIR %", data: rollingFir, color: "#041d4d" },
+    { label: "Putts", data: rollingPutts, color: "#8aa2d3" }
+  ], "Rolling");
+}
+
+function renderAnalyticsComparisons(filteredRounds, roundMetrics) {
+  const compared = buildBestWorstComparison(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="panel"><div class="analytics-section-header"><h2>Best vs Worst Rounds</h2><span class="analytics-note">What separated the low scores from the high scores</span></div>${renderComparisonTable(compared)}</div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Best vs Worst Snapshot</h2><span class="analytics-note">Average metrics across both groups</span></div><div class="chart-wrap"><canvas id="analyticsComparisonChart"></canvas></div></div>
+    </div>
+  `;
+  drawGroupedBarChart("analyticsComparisonChart", ["Score", "GIR %", "FIR %", "Putts", "Penalties", "Chips"], [
+    { label: "Best 5", data: [compared.best.score, compared.best.girPct, compared.best.firPct, compared.best.putts, compared.best.penalties, compared.best.chips], color: "#63d11f" },
+    { label: "Worst 5", data: [compared.worst.score, compared.worst.girPct, compared.worst.firPct, compared.worst.putts, compared.worst.penalties, compared.worst.chips], color: "#041d4d" }
+  ]);
 }
 
 function renderRounds() {
@@ -1044,10 +1303,12 @@ function renderRounds() {
     el.roundList.innerHTML = `<div class="panel"><p>No completed rounds yet.</p></div>`;
     el.roundListSection.classList.remove("hidden");
     el.roundDetailSection.classList.add("hidden");
+    el.roundStatsSection.classList.add("hidden");
     return;
   }
   el.roundListSection.classList.remove("hidden");
   el.roundDetailSection.classList.add("hidden");
+  el.roundStatsSection.classList.add("hidden");
   el.roundList.innerHTML = rounds
     .slice()
     .reverse()
@@ -1063,6 +1324,7 @@ function renderRounds() {
         <p class="round-summary">${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR</p>
         <div class="card-actions">
           <button class="secondary-action" type="button" data-view-round="${round.id}">View</button>
+          <button class="secondary-action" type="button" data-view-round-stats="${round.id}">View stats</button>
           <div class="card-menu-anchor">
             <button class="card-menu-button" type="button" data-round-menu="${round.id}" aria-label="Round options">...</button>
             <div class="card-menu${openRoundCardMenuId === round.id ? "" : " hidden"}">
@@ -1075,6 +1337,7 @@ function renderRounds() {
     `)
     .join("");
   document.querySelectorAll("[data-view-round]").forEach((button) => button.addEventListener("click", () => openRoundDetail(button.dataset.viewRound)));
+  document.querySelectorAll("[data-view-round-stats]").forEach((button) => button.addEventListener("click", () => openRoundStats(button.dataset.viewRoundStats)));
   document.querySelectorAll("[data-round-menu]").forEach((button) =>
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -1093,6 +1356,7 @@ function openRoundDetail(roundId) {
   openRoundCardMenuId = null;
   el.roundListSection.classList.add("hidden");
   el.roundDetailSection.classList.remove("hidden");
+  el.roundStatsSection.classList.add("hidden");
   el.roundDetailTitle.textContent = round.course;
   el.roundDetailMeta.textContent = round.date;
   el.roundDetailTotal.textContent = totalScore(round);
@@ -1122,6 +1386,61 @@ function openRoundDetail(roundId) {
 
 function closeRoundDetail() {
   selectedRoundId = null;
+  el.roundDetailSection.classList.add("hidden");
+  el.roundStatsSection.classList.add("hidden");
+  el.roundListSection.classList.remove("hidden");
+  renderRounds();
+}
+
+function openRoundStats(roundId) {
+  const round = rounds.find((item) => item.id === roundId);
+  if (!round) return;
+  const stats = calculateRoundStats(round);
+  selectedRoundId = roundId;
+  openRoundCardMenuId = null;
+  el.roundListSection.classList.add("hidden");
+  el.roundDetailSection.classList.add("hidden");
+  el.roundStatsSection.classList.remove("hidden");
+  el.roundStatsTitle.textContent = `${round.course} Stats`;
+  el.roundStatsMeta.textContent = round.date;
+  el.roundStatsGross.textContent = totalScore(round);
+  el.roundStatsRelative.textContent = formatRelative(totalScore(round), totalPar(round));
+  el.roundStatsGrid.innerHTML = [
+    ["GIR %", `${stats.girPct}%`],
+    ["Fairway %", `${stats.fairwayPct}%`],
+    ["Avg putts", stats.avgPutts],
+    ["Total putts", stats.totalPutts],
+    ["Avg Par 3", stats.avgPar3],
+    ["Avg Par 4", stats.avgPar4],
+    ["Avg Par 5", stats.avgPar5],
+    ["3-putts", stats.threePutts],
+    ["Penalties", stats.penaltiesTotal],
+    ["Scrambling", `${stats.scramblePct}%`]
+  ]
+    .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+  el.roundStatsTableBody.innerHTML = round.holes
+    .map((hole) => `
+      <tr>
+        <td>${hole.hole}</td>
+        <td>${displayHoleScore(hole)}</td>
+        <td>${formatFairwayCell(hole)}</td>
+        <td>${formatApproachCell(hole)}</td>
+        <td>${formatGirCell(hole)}</td>
+        <td>${displayCellValue(hole.putts)}</td>
+        <td>${countPuttsByDistance(hole, "over")}</td>
+        <td>${countPuttsByDistance(hole, "under")}</td>
+        <td>${displayCellValue(hole.chips)}</td>
+        <td>${displayCellValue(hole.greensideBunker)}</td>
+        <td>${displayCellValue(hole.penaltyStrokes)}</td>
+      </tr>
+    `)
+    .join("");
+}
+
+function closeRoundStats() {
+  selectedRoundId = null;
+  el.roundStatsSection.classList.add("hidden");
   el.roundDetailSection.classList.add("hidden");
   el.roundListSection.classList.remove("hidden");
   renderRounds();
@@ -1166,6 +1485,366 @@ function drawScatter(id, data, xLabel, yLabel) {
       }
     }
   });
+}
+
+function drawMultiLineChart(id, labels, datasets, yLabel) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: "line",
+    data: {
+      labels,
+      datasets: datasets.map((dataset) => ({
+        label: dataset.label,
+        data: dataset.data,
+        borderColor: dataset.color,
+        backgroundColor: dataset.color,
+        tension: 0.25,
+        spanGaps: true
+      }))
+    },
+    options: {
+      ...chartOptions(),
+      scales: {
+        x: axisOptions(""),
+        y: axisOptions(yLabel)
+      }
+    }
+  });
+}
+
+function drawBarChart(id, labels, data, label) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        backgroundColor: data.map((value) => (value >= 0 ? "#041d4d" : "#63d11f"))
+      }]
+    },
+    options: chartOptions()
+  });
+}
+
+function drawGroupedBarChart(id, labels, datasets) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: datasets.map((dataset) => ({
+        label: dataset.label,
+        data: dataset.data,
+        backgroundColor: dataset.color
+      }))
+    },
+    options: chartOptions()
+  });
+}
+
+function renderStatCards(items) {
+  return items.map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`).join("");
+}
+
+function filterLabel() {
+  return el.analyticsRangeSelect.options[el.analyticsRangeSelect.selectedIndex]?.text || "";
+}
+
+function sum(values) {
+  return values.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0);
+}
+
+function countHolePuttsByDistance(hole, direction) {
+  if (!Array.isArray(hole.puttDistances)) return 0;
+  return hole.puttDistances.filter((distance) => typeof distance === "number" && (direction === "over" ? distance > 6 : distance <= 6)).length;
+}
+
+function buildCorrelationRows(roundMetrics) {
+  const metrics = [
+    ["GIR %", "girPct"],
+    ["FIR %", "firPct"],
+    ["Approach hit %", "approachHitPct"],
+    ["Avg approach yds", "avgApproachDistance"],
+    ["Total putts", "puttsTotal"],
+    ["3-putts", "threePutts"],
+    ["Putts > 6ft", "puttsOver6"],
+    ["Putts <= 6ft", "puttsUnder6"],
+    ["Chips", "chipsTotal"],
+    ["Bunker shots", "bunkerTotal"],
+    ["Penalty strokes", "penaltiesTotal"],
+    ["Scrambling %", "scramblePct"],
+    ["Regular chips", "chipRegular"],
+    ["Bump and run", "chipBumpRun"],
+    ["Flop chips", "chipFlop"],
+    ["High obstacle chips", "chipHighObstacle"],
+    ["Rough chips", "chipRough"],
+    ["Bank chips", "chipBank"],
+    ["Putter chips", "chipPutter"]
+  ];
+  return metrics
+    .map(([label, key]) => {
+      const coeff = correl(
+        roundMetrics.map((item) => item[key]),
+        roundMetrics.map((item) => item.score)
+      );
+      const sample = pairSampleCount(roundMetrics.map((item) => item[key]), roundMetrics.map((item) => item.score));
+      return {
+        label,
+        key,
+        coeff,
+        sample,
+        direction: coeff < 0 ? "Higher tends to lower score" : coeff > 0 ? "Lower tends to lower score" : "No clear relationship",
+        strength: correlationStrength(coeff)
+      };
+    })
+    .filter((row) => row.sample >= 3)
+    .sort((a, b) => Math.abs(b.coeff) - Math.abs(a.coeff));
+}
+
+function renderCorrelationTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Metric</th><th>Coeff</th><th>Sample</th><th>Read</th><th>Direction</th></tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr><td>${row.label}</td><td>${row.coeff.toFixed(3)}</td><td>${row.sample}</td><td>${row.strength}</td><td>${row.direction}</td></tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderApproachBucketTable(sourceRounds) {
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
+  const rows = APPROACH_BUCKETS.map((bucket) => {
+    const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket) && hole.approachHit !== null);
+    return {
+      label: bucket.label,
+      attempts: bucketHoles.length,
+      hitPct: pct(bucketHoles.filter((hole) => hole.approachHit).length, bucketHoles.length),
+      avgScore: average(bucketHoles.map((hole) => hole.score)).toFixed(1)
+    };
+  });
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Bucket</th><th>Attempts</th><th>Hit %</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.attempts}</td><td>${row.hitPct}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderMissBreakdownTable(sourceRounds, field) {
+  const missKeys = ["hook", "left", "right", "slice", "top", "heavy", "short", "long"];
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
+  const rows = missKeys.map((key) => {
+    const count = holes.filter((hole) => (field === "fairway" ? hole.fairwayMiss : hole.approachMiss) === key).length;
+    return { key, count };
+  });
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Miss</th><th>Count</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${formatMissLabel(row.key)}</td><td>${row.count}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildMissTrendSeries(sourceRounds, field) {
+  const missKeys = ["hook", "left", "right", "slice", "top", "heavy", "short", "long"];
+  const colors = {
+    hook: "#041d4d",
+    left: "#38598b",
+    right: "#63d11f",
+    slice: "#89df57",
+    top: "#8aa2d3",
+    heavy: "#d48f3f",
+    short: "#cc5a71",
+    long: "#6e6e8f"
+  };
+  return missKeys.map((key) => ({
+    label: formatMissLabel(key),
+    data: sourceRounds.map((round) =>
+      round.holes.map(normalizeHole).filter((hole) => (field === "fairway" ? hole.fairwayMiss : hole.approachMiss) === key).length
+    ),
+    color: colors[key]
+  }));
+}
+
+function chipTypeSummary(sourceRounds) {
+  const chipTypes = [
+    ["regular", "Regular"],
+    ["bumpRun", "Bump and run"],
+    ["flop", "Flop"],
+    ["highObstacle", "High over obstacle"],
+    ["rough", "Out of rough"],
+    ["bank", "Into a bank"],
+    ["putter", "Putter"]
+  ];
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
+  return chipTypes.map(([key, label]) => {
+    const matchingHoles = holes.filter((hole) => (hole.chipTypes || []).includes(key));
+    return {
+      label,
+      count: matchingHoles.reduce((sum, hole) => sum + hole.chipTypes.filter((type) => type === key).length, 0),
+      avgScore: average(matchingHoles.map((hole) => hole.score)).toFixed(1)
+    };
+  });
+}
+
+function renderChipTypeTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Chip Type</th><th>Count</th><th>Avg Score on Hole</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderRecoveryTable(sourceRounds) {
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.gir === false);
+  const scramble = holes.filter((hole) => hole.score !== null && hole.score <= hole.par).length;
+  const avgChips = average(holes.map((hole) => hole.chips)).toFixed(1);
+  const avgBunker = average(holes.map((hole) => hole.greensideBunker)).toFixed(1);
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Missed GIR holes</td><td>${holes.length}</td></tr>
+          <tr><td>Scramble %</td><td>${pct(scramble, holes.length)}%</td></tr>
+          <tr><td>Avg score after missed GIR</td><td>${average(holes.map((hole) => hole.score)).toFixed(1)}</td></tr>
+          <tr><td>Avg chips after missed GIR</td><td>${avgChips}</td></tr>
+          <tr><td>Avg bunker shots after missed GIR</td><td>${avgBunker}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildPuttBucketTable(sourceRounds) {
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
+  return PUTT_BUCKETS.map((bucket) => {
+    const bucketHoles = holes.filter((hole) => inBucket(hole.puttDistances?.[0], bucket) && hole.putts !== null);
+    return {
+      label: bucket.label,
+      holes: bucketHoles.length,
+      avgPutts: average(bucketHoles.map((hole) => hole.putts)).toFixed(1),
+      twoPuttPct: pct(bucketHoles.filter((hole) => hole.putts <= 2).length, bucketHoles.length),
+      threePuttPct: pct(bucketHoles.filter((hole) => hole.putts >= 3).length, bucketHoles.length)
+    };
+  });
+}
+
+function renderPuttBucketTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>1st Putt Distance</th><th>Holes</th><th>Avg Putts</th><th>2-Putt %</th><th>3-Putt %</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.holes}</td><td>${row.avgPutts}</td><td>${row.twoPuttPct}%</td><td>${row.threePuttPct}%</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function rollingAverage(values, windowSize) {
+  return values.map((_, index) => average(values.slice(Math.max(0, index - windowSize + 1), index + 1)));
+}
+
+function compareRecentVsPrevious(roundMetrics) {
+  const recent = roundMetrics.slice(-5);
+  const previous = roundMetrics.slice(-10, -5);
+  return {
+    score: deltaText(average(recent.map((item) => item.score)), average(previous.map((item) => item.score)), true),
+    girPct: deltaText(average(recent.map((item) => item.girPct)), average(previous.map((item) => item.girPct))),
+    firPct: deltaText(average(recent.map((item) => item.firPct)), average(previous.map((item) => item.firPct))),
+    putts: deltaText(average(recent.map((item) => item.puttsTotal)), average(previous.map((item) => item.puttsTotal)), true),
+    penalties: deltaText(average(recent.map((item) => item.penaltiesTotal)), average(previous.map((item) => item.penaltiesTotal)), true),
+    scramble: deltaText(average(recent.map((item) => item.scramblePct)), average(previous.map((item) => item.scramblePct)))
+  };
+}
+
+function buildBestWorstComparison(sourceRounds) {
+  const sorted = sourceRounds.slice().sort((a, b) => totalScore(a) - totalScore(b));
+  const bestRounds = sorted.slice(0, Math.min(5, sorted.length));
+  const worstRounds = sorted.slice(-Math.min(5, sorted.length));
+  return { best: summarizeComparisonGroup(bestRounds), worst: summarizeComparisonGroup(worstRounds) };
+}
+
+function summarizeComparisonGroup(group) {
+  const metrics = group.map(buildRoundMetrics);
+  return {
+    score: average(metrics.map((item) => item.score)).toFixed(1),
+    girPct: Math.round(average(metrics.map((item) => item.girPct))),
+    firPct: Math.round(average(metrics.map((item) => item.firPct))),
+    putts: average(metrics.map((item) => item.puttsTotal)).toFixed(1),
+    penalties: average(metrics.map((item) => item.penaltiesTotal)).toFixed(1),
+    chips: average(metrics.map((item) => item.chipsTotal)).toFixed(1),
+    bunker: average(metrics.map((item) => item.bunkerTotal)).toFixed(1),
+    scramblePct: Math.round(average(metrics.map((item) => item.scramblePct)))
+  };
+}
+
+function renderComparisonTable(compared) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Metric</th><th>Best 5</th><th>Worst 5</th></tr></thead>
+        <tbody>
+          ${[
+            ["Score", compared.best.score, compared.worst.score],
+            ["GIR %", `${compared.best.girPct}%`, `${compared.worst.girPct}%`],
+            ["FIR %", `${compared.best.firPct}%`, `${compared.worst.firPct}%`],
+            ["Putts", compared.best.putts, compared.worst.putts],
+            ["Penalties", compared.best.penalties, compared.worst.penalties],
+            ["Chips", compared.best.chips, compared.worst.chips],
+            ["Bunker", compared.best.bunker, compared.worst.bunker],
+            ["Scrambling %", `${compared.best.scramblePct}%`, `${compared.worst.scramblePct}%`]
+          ].map((row) => `<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function correl(xs, ys) {
+  const pairs = xs.map((x, index) => [x, ys[index]]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  if (pairs.length < 2) return 0;
+  const xVals = pairs.map(([x]) => x);
+  const yVals = pairs.map(([, y]) => y);
+  const xMean = average(xVals);
+  const yMean = average(yVals);
+  const numerator = pairs.reduce((sum, [x, y]) => sum + ((x - xMean) * (y - yMean)), 0);
+  const xDenominator = Math.sqrt(xVals.reduce((sum, x) => sum + ((x - xMean) ** 2), 0));
+  const yDenominator = Math.sqrt(yVals.reduce((sum, y) => sum + ((y - yMean) ** 2), 0));
+  const denominator = xDenominator * yDenominator;
+  return denominator ? numerator / denominator : 0;
+}
+
+function pairSampleCount(xs, ys) {
+  return xs.map((x, index) => [x, ys[index]]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y)).length;
+}
+
+function correlationStrength(coeff) {
+  const value = Math.abs(coeff);
+  if (value >= 0.7) return "Strong";
+  if (value >= 0.4) return "Moderate";
+  if (value >= 0.2) return "Light";
+  return "Weak";
+}
+
+function deltaText(current, previous, lowerIsBetter = false) {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0 && current === 0) return "—";
+  const delta = current - previous;
+  const prefix = delta > 0 ? "+" : "";
+  const value = `${prefix}${delta.toFixed(1)}`;
+  return lowerIsBetter ? value : `${value}%`;
 }
 
 function chartOptions() {
@@ -1279,10 +1958,22 @@ function updateRunningScore() {
 }
 
 function updateResumeButton() {
-  el.resumeRoundBtn.classList.toggle("hidden", !activeRound);
+  el.resumeRoundBtn.classList.toggle("hidden", !activeRound || Boolean(editingCompletedRoundId));
 }
 
 function persistActiveRound() {
+  if (editingCompletedRoundId) {
+    const updatedRound = normalizeRound({ ...activeRound, id: editingCompletedRoundId });
+    delete updatedRound.currentHoleIndex;
+    rounds = rounds.map((round) => (round.id === editingCompletedRoundId ? updatedRound : round));
+    saveRounds();
+    localStorage.removeItem(STORAGE_KEYS.activeRound);
+    updateResumeButton();
+    renderDashboard();
+    renderAnalytics();
+    renderRounds();
+    return;
+  }
   localStorage.setItem(STORAGE_KEYS.activeRound, JSON.stringify(activeRound));
   updateResumeButton();
 }
@@ -1369,6 +2060,31 @@ function displayHoleScore(hole) {
   return hole.pickedUp ? `${hole.score}*` : String(hole.score);
 }
 
+function displayCellValue(value) {
+  return value === null || value === undefined || value === "" ? "—" : String(value);
+}
+
+function formatFairwayCell(hole) {
+  if (hole.par === 3 || hole.fairway === null) return "—";
+  return hole.fairway ? "Hit" : formatMissLabel(hole.fairwayMiss);
+}
+
+function formatApproachCell(hole) {
+  if (hole.approachHit === null) return "—";
+  return hole.approachHit ? "Hit" : formatMissLabel(hole.approachMiss);
+}
+
+function formatGirCell(hole) {
+  if (hole.gir === null) return "—";
+  return hole.gir ? "✓" : "✗";
+}
+
+function countPuttsByDistance(hole, direction) {
+  if (hole.putts === null || !Array.isArray(hole.puttDistances) || !hole.puttDistances.length) return "—";
+  const count = hole.puttDistances.filter((distance) => typeof distance === "number" && (direction === "over" ? distance > 6 : distance <= 6)).length;
+  return String(count);
+}
+
 function scoreDecorationClass(hole) {
   if (hole.score === null) return "";
   const diff = hole.score - hole.par;
@@ -1422,6 +2138,31 @@ function bestScoreLabel() {
   if (!scoredRounds.length) return "No score";
   const best = scoredRounds.slice().sort((a, b) => totalScore(a) - totalScore(b))[0];
   return `${totalScore(best)} · ${best.course}`;
+}
+
+function calculateRoundStats(round) {
+  const holes = round.holes.map(normalizeHole);
+  const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
+  const girHoles = holes.filter((hole) => hole.gir !== null);
+  const puttHoles = holes.filter((hole) => hole.putts !== null);
+  const totalPutts = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
+  const par3Scores = holes.filter((hole) => hole.par === 3 && hole.score !== null).map((hole) => hole.score);
+  const par4Scores = holes.filter((hole) => hole.par === 4 && hole.score !== null).map((hole) => hole.score);
+  const par5Scores = holes.filter((hole) => hole.par === 5 && hole.score !== null).map((hole) => hole.score);
+  const missedGir = holes.filter((hole) => hole.gir === false);
+  const scrambleMade = missedGir.filter((hole) => hole.score !== null && hole.score <= hole.par).length;
+  return {
+    girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
+    fairwayPct: pct(fairwayHoles.filter((hole) => hole.fairway).length, fairwayHoles.length),
+    avgPutts: average(puttHoles.map((hole) => hole.putts)).toFixed(1),
+    totalPutts,
+    avgPar3: average(par3Scores).toFixed(1),
+    avgPar4: average(par4Scores).toFixed(1),
+    avgPar5: average(par5Scores).toFixed(1),
+    threePutts: puttHoles.filter((hole) => hole.putts >= 3).length,
+    penaltiesTotal: holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0),
+    scramblePct: pct(scrambleMade, missedGir.length)
+  };
 }
 
 function average(values) {
