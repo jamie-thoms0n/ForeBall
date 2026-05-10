@@ -400,6 +400,7 @@ function goNextHole(event) {
     activeRound.currentHoleIndex = currentHoleIndex;
     persistActiveRound();
     showHole();
+    window.scrollTo({ top: 0, behavior: "auto" });
   }
 }
 
