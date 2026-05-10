@@ -1,5 +1,6 @@
 const STORAGE_KEYS = {
   rounds: "foreball.rounds.v1",
+  roundsBackup: "foreball.rounds.backup.v1",
   activeRound: "foreball.activeRound.v1",
   meta: "foreball.meta.v1"
 };
@@ -95,21 +96,61 @@ let rounds = loadRounds();
 let currentHoleIndex = activeRound?.currentHoleIndex || 0;
 let charts = {};
 let pendingConfirmAction = null;
-
-window.__debugClick = function debugClick(label) {
-  const url = `/__debug_click__?button=${encodeURIComponent(label)}&ts=${Date.now()}`;
-  fetch(url, { method: "GET", cache: "no-store" }).catch(() => {});
-  console.log("debug click:", label);
-};
+let openRoundCardMenuId = null;
+let selectedRoundId = null;
 
 window.__menuClick = function menuClick(event) {
-  console.log("menu action");
   toggleRoundMenu(event);
 };
 
+window.__pickedUpMenuClick = function pickedUpMenuClick(event) {
+  if (event) event.stopPropagation();
+  togglePickedUpFromMenu();
+};
+
+window.__restartRoundMenuClick = function restartRoundMenuClick(event) {
+  if (event) event.stopPropagation();
+  openConfirmModal("restart");
+};
+
+window.__finishRoundMenuClick = function finishRoundMenuClick(event) {
+  if (event) event.stopPropagation();
+  finishRoundFromMenu();
+};
+
+window.__cancelRoundMenuClick = function cancelRoundMenuClick(event) {
+  if (event) event.stopPropagation();
+  openConfirmModal("cancel");
+};
+
 window.__nextClick = function nextClick(event) {
-  console.log("next action");
   goNextHole(event);
+};
+
+window.__puttChoiceClick = function puttChoiceClick(choice) { handlePuttChoice(choice); };
+
+window.__otherPuttsChanged = function otherPuttsChanged(value) {
+  el.otherPuttsSelect.value = value;
+  handleOtherPuttsChange();
+};
+
+window.__chipChoiceClick = function chipChoiceClick(choice) { handleChipChoice(choice); };
+
+window.__otherChipsChanged = function otherChipsChanged(value) {
+  el.otherChipsSelect.value = value;
+  handleOtherChipsChange();
+};
+
+window.__bunkerChoiceClick = function bunkerChoiceClick(choice) { handleBunkerChoice(choice); };
+
+window.__otherBunkerChanged = function otherBunkerChanged(value) {
+  el.otherBunkerSelect.value = value;
+  handleOtherBunkerChange();
+};
+
+window.__roundDetailBackClick = function roundDetailBackClick(event) {
+  if (event) event.preventDefault();
+  closeRoundDetail();
 };
 
 const el = {
@@ -130,9 +171,11 @@ const el = {
   roundMenuBtn: document.getElementById("roundMenuBtn"),
   roundMenu: document.getElementById("roundMenu"),
   menuPickedUpBtn: document.getElementById("menuPickedUpBtn"),
+  menuFinishRoundBtn: document.getElementById("menuFinishRoundBtn"),
   menuRestartRoundBtn: document.getElementById("menuRestartRoundBtn"),
   menuCancelRoundBtn: document.getElementById("menuCancelRoundBtn"),
   scoreInput: document.getElementById("scoreInput"),
+  scoreAsterisk: document.getElementById("scoreAsterisk"),
   pickedUpValue: document.getElementById("pickedUpValue"),
   fairwayField: document.getElementById("fairwayField"),
   fairwayFollowup: document.getElementById("fairwayFollowup"),
@@ -159,8 +202,19 @@ const el = {
   dashboardRecent: document.getElementById("dashboardRecent"),
   statsGrid: document.getElementById("statsGrid"),
   roundList: document.getElementById("roundList"),
-  exportJsonBtn: document.getElementById("exportJsonBtn"),
-  exportCsvBtn: document.getElementById("exportCsvBtn"),
+  roundListSection: document.getElementById("roundListSection"),
+  roundDetailSection: document.getElementById("roundDetailSection"),
+  roundDetailBackBtn: document.getElementById("roundDetailBackBtn"),
+  roundDetailTitle: document.getElementById("roundDetailTitle"),
+  roundDetailMeta: document.getElementById("roundDetailMeta"),
+  roundDetailStatsBtn: document.getElementById("roundDetailStatsBtn"),
+  roundDetailTotal: document.getElementById("roundDetailTotal"),
+  roundDetailRelative: document.getElementById("roundDetailRelative"),
+  roundDetailParTotal: document.getElementById("roundDetailParTotal"),
+  roundDetailGrossTotal: document.getElementById("roundDetailGrossTotal"),
+  roundDetailFooterRelative: document.getElementById("roundDetailFooterRelative"),
+  roundScoreGrid: document.getElementById("roundScoreGrid"),
+  roundDetailTableBody: document.getElementById("roundDetailTableBody"),
   confirmModal: document.getElementById("confirmModal"),
   confirmModalTitle: document.getElementById("confirmModalTitle"),
   confirmModalMessage: document.getElementById("confirmModalMessage"),
@@ -176,14 +230,22 @@ function init() {
   bindEvents();
   updateResumeButton();
   if (activeRound) showHole();
-  renderDashboard();
-  renderAnalytics();
   renderRounds();
   setView("dashboard");
+  window.addEventListener("load", () => {
+    if (document.getElementById("dashboardView").classList.contains("is-active")) {
+      queueVisibleRender(renderDashboard);
+    }
+  });
   registerServiceWorker();
 }
 
 function bindEvents() {
+  window.addEventListener("beforeunload", flushPersistence);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPersistence();
+  });
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => setView(tab.dataset.view));
   });
@@ -227,6 +289,7 @@ function bindEvents() {
   el.nextHoleBtn.onclick = goNextHole;
   el.roundMenuBtn.addEventListener("click", toggleRoundMenu);
   el.menuPickedUpBtn.addEventListener("click", togglePickedUpFromMenu);
+  el.menuFinishRoundBtn.addEventListener("click", finishRoundFromMenu);
   el.menuRestartRoundBtn.addEventListener("click", () => openConfirmModal("restart"));
   el.menuCancelRoundBtn.addEventListener("click", () => openConfirmModal("cancel"));
   el.confirmModalCancelBtn.addEventListener("click", closeConfirmModal);
@@ -259,8 +322,10 @@ function bindEvents() {
   });
   el.otherPenaltySelect.addEventListener("change", handleOtherPenaltyChange);
 
-  el.exportJsonBtn.addEventListener("click", exportJson);
-  el.exportCsvBtn.addEventListener("click", exportCsv);
+  el.roundDetailBackBtn.addEventListener("click", closeRoundDetail);
+  el.roundDetailStatsBtn.addEventListener("click", () => {
+    if (selectedRoundId) editRound(selectedRoundId);
+  });
 }
 
 function populateCourses() {
@@ -311,6 +376,7 @@ function createRoundState(course) {
       length: course.lengths?.[index] ?? null,
       score: null,
       pickedUp: false,
+      pickedUpManual: false,
       fairway: par === 3 ? null : null,
       fairwayMiss: null,
       gir: null,
@@ -341,7 +407,8 @@ function showHole() {
   el.holeLength.textContent = hole.length ? `Length: ${hole.length} yds` : "Length: -- yds";
   el.holeStrokeIndex.textContent = hole.strokeIndex ? `S.I.: ${hole.strokeIndex}` : "S.I.: --";
   el.holePar.textContent = `Par ${hole.par}`;
-  el.scoreInput.value = hole.score ?? "";
+  el.scoreInput.value = hole.pickedUp ? hole.par + 3 : hole.score ?? "";
+  el.scoreAsterisk.classList.toggle("hidden", !hole.pickedUp);
   el.pickedUpValue.classList.toggle("hidden", !hole.pickedUp);
   el.menuPickedUpBtn.classList.toggle("is-active", Boolean(hole.pickedUp));
   el.approachDistanceInput.value = hole.approachDistance ?? "";
@@ -365,10 +432,13 @@ function saveCurrentHole() {
   const hole = currentHole();
   const putts = hole.putts;
   const puttDistances = Array.from(document.querySelectorAll(".putt-distance-input")).map((input) => numberOrNull(input.value));
+  const enteredScore = numberOrNull(el.scoreInput.value);
+  const pickedUp = hole.pickedUpManual || enteredScore === null;
   const nextHole = {
     ...hole,
-    score: numberOrNull(el.scoreInput.value),
-    pickedUp: hole.pickedUp,
+    score: pickedUp ? hole.par + 3 : enteredScore,
+    pickedUp,
+    pickedUpManual: hole.pickedUpManual,
     gir: radioValue("gir"),
     approachDistance: limitNumberOrNull(el.approachDistanceInput.value, 999),
     chips: hole.chips ?? null,
@@ -387,6 +457,8 @@ function saveCurrentHole() {
 }
 
 function completeRound() {
+  saveCurrentHole();
+  finalizeRemainingHoles();
   const completed = { ...activeRound };
   delete completed.currentHoleIndex;
   rounds = rounds.filter((round) => round.id !== completed.id).concat(normalizeRound(completed));
@@ -419,6 +491,7 @@ function editRound(roundId) {
 function deleteRound(roundId) {
   if (!confirm("Delete this round?")) return;
   rounds = rounds.filter((round) => round.id !== roundId);
+  if (selectedRoundId === roundId) closeRoundDetail();
   saveRounds();
   renderDashboard();
   renderAnalytics();
@@ -544,7 +617,7 @@ function bindToggleableGir() {
 }
 
 function clearHoleValues(hole) {
-  hole.score = null;
+  hole.score = hole.par + 3;
   hole.fairway = hole.par === 3 ? null : null;
   hole.fairwayMiss = null;
   hole.gir = null;
@@ -562,6 +635,20 @@ function clearHoleValues(hole) {
   hole.penaltyStrokes = null;
 }
 
+function finalizeRemainingHoles() {
+  if (!activeRound) return;
+  activeRound.holes = activeRound.holes.map((hole, index) => {
+    if (index === currentHoleIndex) return normalizeHole(hole);
+    if (hole.score !== null) return normalizeHole(hole);
+    return normalizeHole({
+      ...hole,
+      score: hole.par + 3,
+      pickedUp: true,
+      pickedUpManual: true
+    });
+  });
+}
+
 function toggleRoundMenu(event) {
   event.stopPropagation();
   const open = el.roundMenu.classList.contains("hidden");
@@ -576,16 +663,27 @@ function closeRoundMenu() {
 
 function handleDocumentClick(event) {
   if (!event.target.closest(".menu-anchor")) closeRoundMenu();
+  if (!event.target.closest(".card-menu-anchor")) {
+    openRoundCardMenuId = null;
+    renderRounds();
+  }
 }
 
 function togglePickedUpFromMenu() {
   if (!activeRound) return;
   const hole = currentHole();
-  hole.pickedUp = !hole.pickedUp;
-  if (hole.pickedUp) clearHoleValues(hole);
+  hole.pickedUpManual = !hole.pickedUpManual;
+  hole.pickedUp = hole.pickedUpManual;
+  if (hole.pickedUpManual) clearHoleValues(hole);
   persistActiveRound();
   closeRoundMenu();
   showHole();
+}
+
+function finishRoundFromMenu() {
+  if (!activeRound) return;
+  closeRoundMenu();
+  completeRound();
 }
 
 function openConfirmModal(action) {
@@ -944,8 +1042,12 @@ function calculateStats(sourceRounds) {
 function renderRounds() {
   if (!rounds.length) {
     el.roundList.innerHTML = `<div class="panel"><p>No completed rounds yet.</p></div>`;
+    el.roundListSection.classList.remove("hidden");
+    el.roundDetailSection.classList.add("hidden");
     return;
   }
+  el.roundListSection.classList.remove("hidden");
+  el.roundDetailSection.classList.add("hidden");
   el.roundList.innerHTML = rounds
     .slice()
     .reverse()
@@ -958,16 +1060,71 @@ function renderRounds() {
           </div>
           <strong>${formatRelative(totalScore(round), totalPar(round))}</strong>
         </header>
-        <p>${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR</p>
+        <p class="round-summary">${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR</p>
         <div class="card-actions">
-          <button class="secondary-action" type="button" data-edit="${round.id}">Edit</button>
-          <button class="danger-action" type="button" data-delete="${round.id}">Delete</button>
+          <button class="secondary-action" type="button" data-view-round="${round.id}">View</button>
+          <div class="card-menu-anchor">
+            <button class="card-menu-button" type="button" data-round-menu="${round.id}" aria-label="Round options">...</button>
+            <div class="card-menu${openRoundCardMenuId === round.id ? "" : " hidden"}">
+              <button class="card-menu-item" type="button" data-edit="${round.id}">Edit</button>
+              <button class="card-menu-item hole-menu-item-danger" type="button" data-delete="${round.id}">Delete</button>
+            </div>
+          </div>
         </div>
       </article>
     `)
     .join("");
+  document.querySelectorAll("[data-view-round]").forEach((button) => button.addEventListener("click", () => openRoundDetail(button.dataset.viewRound)));
+  document.querySelectorAll("[data-round-menu]").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openRoundCardMenuId = openRoundCardMenuId === button.dataset.roundMenu ? null : button.dataset.roundMenu;
+      renderRounds();
+    })
+  );
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => editRound(button.dataset.edit)));
   document.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => deleteRound(button.dataset.delete)));
+}
+
+function openRoundDetail(roundId) {
+  const round = rounds.find((item) => item.id === roundId);
+  if (!round) return;
+  selectedRoundId = roundId;
+  openRoundCardMenuId = null;
+  el.roundListSection.classList.add("hidden");
+  el.roundDetailSection.classList.remove("hidden");
+  el.roundDetailTitle.textContent = round.course;
+  el.roundDetailMeta.textContent = round.date;
+  el.roundDetailTotal.textContent = totalScore(round);
+  el.roundDetailRelative.textContent = formatRelative(totalScore(round), totalPar(round));
+  el.roundDetailParTotal.textContent = `Par ${totalPar(round)}`;
+  el.roundDetailGrossTotal.textContent = `Gross ${totalScore(round)}`;
+  el.roundDetailFooterRelative.textContent = `(${formatRelative(totalScore(round), totalPar(round))})`;
+  el.roundScoreGrid.innerHTML = round.holes
+    .map((hole) => `
+      <div class="round-score-cell">
+        <span class="round-score-hole">${hole.hole}</span>
+        <span class="round-score-mark ${scoreDecorationClass(hole)}">${displayHoleScore(hole)}</span>
+      </div>
+    `)
+    .join("");
+  el.roundDetailTableBody.innerHTML = round.holes
+    .map((hole) => `
+      <tr>
+        <td>${hole.hole}</td>
+        <td>${hole.strokeIndex ?? "--"}</td>
+        <td>${hole.par}</td>
+        <td class="table-score-cell"><span class="round-score-mark ${scoreDecorationClass(hole)}">${displayHoleScore(hole)}</span></td>
+      </tr>
+    `)
+    .join("");
+}
+
+function closeRoundDetail() {
+  selectedRoundId = null;
+  el.roundDetailSection.classList.add("hidden");
+  el.roundListSection.classList.remove("hidden");
+  renderRounds();
 }
 
 function drawChart(id, type, labels, data, label) {
@@ -1104,9 +1261,13 @@ function setView(view) {
   document.getElementById(`${view}View`).classList.add("is-active");
   el.screenTitle.textContent =
     view === "dashboard" ? "Dashboard" : view === "scorecard" ? "Scorecard" : view === "analytics" ? "Analytics" : "Rounds";
-  if (view === "dashboard") renderDashboard();
-  if (view === "analytics") renderAnalytics();
+  if (view === "dashboard") queueVisibleRender(renderDashboard);
+  if (view === "analytics") queueVisibleRender(renderAnalytics);
   if (view === "rounds") renderRounds();
+}
+
+function queueVisibleRender(renderFn) {
+  requestAnimationFrame(() => requestAnimationFrame(renderFn));
 }
 
 function updateRunningScore() {
@@ -1127,7 +1288,9 @@ function persistActiveRound() {
 }
 
 function saveRounds() {
-  localStorage.setItem(STORAGE_KEYS.rounds, JSON.stringify(rounds));
+  const payload = JSON.stringify(rounds);
+  localStorage.setItem(STORAGE_KEYS.rounds, payload);
+  localStorage.setItem(STORAGE_KEYS.roundsBackup, payload);
 }
 
 function saveMeta() {
@@ -1135,12 +1298,35 @@ function saveMeta() {
 }
 
 function loadRounds() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.rounds) || "[]").map(normalizeRound);
+  const primary = safeLoadJson(STORAGE_KEYS.rounds);
+  if (Array.isArray(primary)) return primary.map(normalizeRound);
+  const backup = safeLoadJson(STORAGE_KEYS.roundsBackup);
+  if (Array.isArray(backup)) return backup.map(normalizeRound);
+  return [];
 }
 
 function loadActiveRound() {
-  const round = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeRound) || "null");
+  const round = safeLoadJson(STORAGE_KEYS.activeRound);
   return round ? normalizeRound(round) : null;
+}
+
+function flushPersistence() {
+  try {
+    if (activeRound) persistActiveRound();
+    saveRounds();
+  } catch (error) {
+    console.error("Persistence flush failed", error);
+  }
+}
+
+function safeLoadJson(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error(`Failed to load storage key: ${key}`, error);
+    return null;
+  }
 }
 
 function currentHole() {
@@ -1176,6 +1362,21 @@ function totalScore(round) {
 
 function totalPar(round) {
   return round.holes.reduce((sum, hole) => sum + (hole.score !== null ? hole.par : 0), 0);
+}
+
+function displayHoleScore(hole) {
+  if (hole.score === null) return "—";
+  return hole.pickedUp ? `${hole.score}*` : String(hole.score);
+}
+
+function scoreDecorationClass(hole) {
+  if (hole.score === null) return "";
+  const diff = hole.score - hole.par;
+  if (diff <= -2) return "is-eagle";
+  if (diff === -1) return "is-birdie";
+  if (diff === 1) return "is-bogey";
+  if (diff >= 2) return "is-double-bogey";
+  return "";
 }
 
 function girCount(round) {
@@ -1258,6 +1459,7 @@ function normalizeHole(hole) {
     strokeIndex: hole.strokeIndex ?? null,
     length: hole.length ?? null,
     pickedUp: Boolean(hole.pickedUp),
+    pickedUpManual: Boolean(hole.pickedUpManual ?? hole.pickedUp),
     fairway: hole.fairway ?? hole.fir ?? null,
     fairwayMiss: hole.fairwayMiss ?? null,
     approachHit: hole.approachHit ?? null,

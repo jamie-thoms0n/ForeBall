@@ -74,11 +74,12 @@
                 <h2 id="holeTitle">Hole 1</h2>
               </div>
               <div class="menu-anchor hole-header-menu">
-                <button class="hole-menu-button" type="button" id="roundMenuBtn" aria-label="Round menu" aria-expanded="false" onclick="window.__debugClick && window.__debugClick('menu'); window.__menuClick && window.__menuClick(event)">...</button>
+                <button class="hole-menu-button" type="button" id="roundMenuBtn" aria-label="Round menu" aria-expanded="false" onclick="window.__menuClick && window.__menuClick(event)">...</button>
                 <div class="hole-menu hidden" id="roundMenu">
-                  <button class="hole-menu-item" type="button" id="menuPickedUpBtn">Picked Up</button>
-                  <button class="hole-menu-item" type="button" id="menuRestartRoundBtn">Restart Round</button>
-                  <button class="hole-menu-item hole-menu-item-danger" type="button" id="menuCancelRoundBtn">Cancel Round</button>
+                  <button class="hole-menu-item" type="button" id="menuPickedUpBtn" onclick="window.__pickedUpMenuClick && window.__pickedUpMenuClick(event)">Picked Up</button>
+                  <button class="hole-menu-item" type="button" id="menuFinishRoundBtn" onclick="window.__finishRoundMenuClick && window.__finishRoundMenuClick(event)">Finish Round</button>
+                  <button class="hole-menu-item" type="button" id="menuRestartRoundBtn" onclick="window.__restartRoundMenuClick && window.__restartRoundMenuClick(event)">Restart Round</button>
+                  <button class="hole-menu-item hole-menu-item-danger" type="button" id="menuCancelRoundBtn" onclick="window.__cancelRoundMenuClick && window.__cancelRoundMenuClick(event)">Cancel Round</button>
                 </div>
               </div>
               <div class="hole-header-spacer"></div>
@@ -91,7 +92,7 @@
                   <button class="hole-par hole-par-button" type="button" id="holePar">Par 4</button>
                 </div>
               </div>
-              <button class="hole-nav-button hole-header-next" type="button" id="topNextHoleBtn" onclick="window.__debugClick && window.__debugClick('top-next'); window.__nextClick && window.__nextClick(event)">Next</button>
+              <button class="hole-nav-button hole-header-next" type="button" id="topNextHoleBtn" onclick="window.__nextClick && window.__nextClick(event)">Next</button>
             </div>
 
             <div class="score-stepper">
@@ -99,11 +100,12 @@
               <div class="score-display">
                 <label class="sr-only" for="scoreInput">Score</label>
                 <input id="scoreInput" name="score" type="number" inputmode="numeric" min="1">
+                <span class="score-asterisk hidden" id="scoreAsterisk">*</span>
               </div>
               <button type="button" class="round-button" data-step="1" aria-label="Increase score">+</button>
             </div>
 
-            <p class="detail-value hidden" id="pickedUpValue">This hole is excluded from averages unless you enter data.</p>
+            <p class="detail-value hidden" id="pickedUpValue">Picked up counts as triple bogey. Other unchecked fields stay out of the stats.</p>
 
             <div class="toggle-grid">
               <fieldset id="fairwayField">
@@ -152,37 +154,16 @@
             </fieldset>
 
             <fieldset>
-              <legend>Putts</legend>
-              <div class="putt-choice-row">
-                <button class="putt-choice" type="button" data-putt-choice="1">1</button>
-                <button class="putt-choice" type="button" data-putt-choice="2">2</button>
-                <button class="putt-choice" type="button" data-putt-choice="3">3</button>
-                <button class="putt-choice" type="button" data-putt-choice="other">Other</button>
-              </div>
-              <div class="hidden" id="otherPuttsWrap">
-                <label for="otherPuttsSelect">Putts</label>
-                <select id="otherPuttsSelect">
-                  <option value="">Select</option>
-                  <option value="0">0</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                  <option value="6">6</option>
-                </select>
-              </div>
-            </fieldset>
-            <div id="puttDistanceFields" class="putt-distance-grid"></div>
-
-            <fieldset>
               <legend>Chips</legend>
               <div class="putt-choice-row">
-                <button class="chip-choice" type="button" data-chip-choice="1">1</button>
-                <button class="chip-choice" type="button" data-chip-choice="2">2</button>
-                <button class="chip-choice" type="button" data-chip-choice="3">3</button>
-                <button class="chip-choice" type="button" data-chip-choice="other">Other</button>
+                <button class="chip-choice" type="button" data-chip-choice="1" onclick="window.__chipChoiceClick && window.__chipChoiceClick('1')">1</button>
+                <button class="chip-choice" type="button" data-chip-choice="2" onclick="window.__chipChoiceClick && window.__chipChoiceClick('2')">2</button>
+                <button class="chip-choice" type="button" data-chip-choice="3" onclick="window.__chipChoiceClick && window.__chipChoiceClick('3')">3</button>
+                <button class="chip-choice" type="button" data-chip-choice="other" onclick="window.__chipChoiceClick && window.__chipChoiceClick('other')">Other</button>
               </div>
               <div class="hidden" id="otherChipsWrap">
                 <label for="otherChipsSelect">Chips</label>
-                <select id="otherChipsSelect">
+                <select id="otherChipsSelect" onchange="window.__otherChipsChanged && window.__otherChipsChanged(this.value)">
                   <option value="">Select</option>
                   <option value="0">0</option>
                   <option value="4">4</option>
@@ -197,14 +178,14 @@
             <fieldset>
               <legend>Greenside bunker</legend>
               <div class="putt-choice-row">
-                <button class="bunker-choice" type="button" data-bunker-choice="1">1</button>
-                <button class="bunker-choice" type="button" data-bunker-choice="2">2</button>
-                <button class="bunker-choice" type="button" data-bunker-choice="3">3</button>
-                <button class="bunker-choice" type="button" data-bunker-choice="other">Other</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="1" onclick="window.__bunkerChoiceClick && window.__bunkerChoiceClick('1')">1</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="2" onclick="window.__bunkerChoiceClick && window.__bunkerChoiceClick('2')">2</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="3" onclick="window.__bunkerChoiceClick && window.__bunkerChoiceClick('3')">3</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="other" onclick="window.__bunkerChoiceClick && window.__bunkerChoiceClick('other')">Other</button>
               </div>
               <div class="hidden" id="otherBunkerWrap">
                 <label for="otherBunkerSelect">Greenside bunker</label>
-                <select id="otherBunkerSelect">
+                <select id="otherBunkerSelect" onchange="window.__otherBunkerChanged && window.__otherBunkerChanged(this.value)">
                   <option value="">Select</option>
                   <option value="0">0</option>
                   <option value="4">4</option>
@@ -214,6 +195,27 @@
                 </select>
               </div>
             </fieldset>
+
+            <fieldset>
+              <legend>Putts</legend>
+              <div class="putt-choice-row">
+                <button class="putt-choice" type="button" data-putt-choice="1" onclick="window.__puttChoiceClick && window.__puttChoiceClick('1')">1</button>
+                <button class="putt-choice" type="button" data-putt-choice="2" onclick="window.__puttChoiceClick && window.__puttChoiceClick('2')">2</button>
+                <button class="putt-choice" type="button" data-putt-choice="3" onclick="window.__puttChoiceClick && window.__puttChoiceClick('3')">3</button>
+                <button class="putt-choice" type="button" data-putt-choice="other" onclick="window.__puttChoiceClick && window.__puttChoiceClick('other')">Other</button>
+              </div>
+              <div class="hidden" id="otherPuttsWrap">
+                <label for="otherPuttsSelect">Putts</label>
+                <select id="otherPuttsSelect" onchange="window.__otherPuttsChanged && window.__otherPuttsChanged(this.value)">
+                  <option value="">Select</option>
+                  <option value="0">0</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                </select>
+              </div>
+            </fieldset>
+            <div id="puttDistanceFields" class="putt-distance-grid"></div>
 
             <fieldset>
               <legend>Penalty</legend>
@@ -240,7 +242,7 @@
             <div class="action-row action-row-nav">
               <button class="hole-nav-button" type="button" id="prevHoleBtn">Prev</button>
               <div></div>
-              <button class="hole-nav-button" type="button" id="nextHoleBtn" onclick="window.__debugClick && window.__debugClick('bottom-next'); window.__nextClick && window.__nextClick(event)">Next</button>
+              <button class="hole-nav-button" type="button" id="nextHoleBtn" onclick="window.__nextClick && window.__nextClick(event)">Next</button>
             </div>
           </form>
         </section>
@@ -255,13 +257,57 @@
         </section>
 
         <section id="roundsView" class="view">
-          <div class="panel">
-            <div class="round-actions">
-              <button class="secondary-action" type="button" id="exportJsonBtn">Export JSON</button>
-              <button class="secondary-action" type="button" id="exportCsvBtn">Export CSV</button>
+          <div id="roundListSection">
+            <div id="roundList" class="round-list"></div>
+          </div>
+          <div id="roundDetailSection" class="hidden">
+            <div class="panel round-detail-panel">
+              <div class="round-detail-header">
+                <button class="secondary-action round-detail-back" type="button" id="roundDetailBackBtn" onclick="window.__roundDetailBackClick && window.__roundDetailBackClick(event)">Back</button>
+                <div>
+                  <h2 id="roundDetailTitle">Round Overview</h2>
+                  <p id="roundDetailMeta"></p>
+                </div>
+                <div class="round-detail-summary">
+                  <strong id="roundDetailTotal">0</strong>
+                  <span id="roundDetailRelative">E</span>
+                </div>
+              </div>
+              <div class="round-score-grid" id="roundScoreGrid"></div>
+              <div class="round-overview-table-wrap">
+                <table class="round-overview-table">
+                  <thead>
+                    <tr>
+                      <th>Hole</th>
+                      <th>S.I.</th>
+                      <th>Par</th>
+                      <th>Score</th>
+                    </tr>
+                  </thead>
+                  <tbody id="roundDetailTableBody"></tbody>
+                  <tfoot>
+                    <tr class="round-overview-stats-row">
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td class="table-score-cell"><button class="secondary-action round-detail-stats" type="button" id="roundDetailStatsBtn">View stats</button></td>
+                    </tr>
+                    <tr class="round-overview-total-row">
+                      <td>Total</td>
+                      <td></td>
+                      <td id="roundDetailParTotal">71</td>
+                      <td class="table-score-cell">
+                        <div class="round-table-total-score">
+                          <strong id="roundDetailGrossTotal">78</strong>
+                          <span id="roundDetailFooterRelative">(+7)</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
-          <div id="roundList" class="round-list"></div>
         </section>
       </main>
     </div>
