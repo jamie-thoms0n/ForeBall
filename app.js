@@ -26,6 +26,33 @@ const PUTT_BUCKETS = [
   { label: "20+", min: 20, max: Infinity }
 ];
 
+const PENALTY_PRESETS = {
+  threeOffTee: 2,
+  lostBall: 1,
+  ob: 1
+};
+
+const FOLLOW_UP_CONFIG = {
+  fairway: {
+    left: [{ value: "hook", label: "Hook" }, { value: "left", label: "No Hook" }],
+    right: [{ value: "slice", label: "Slice" }, { value: "right", label: "No Slice" }],
+    short: [
+      { value: "heavy", label: "Heavy" },
+      { value: "top", label: "Topped" },
+      { value: "short", label: "Neither" }
+    ]
+  },
+  approach: {
+    left: [{ value: "hook", label: "Hook" }, { value: "left", label: "No Hook" }],
+    right: [{ value: "slice", label: "Slice" }, { value: "right", label: "No Slice" }],
+    short: [
+      { value: "heavy", label: "Heavy" },
+      { value: "top", label: "Topped" },
+      { value: "short", label: "Neither" }
+    ]
+  }
+};
+
 let activeRound = loadActiveRound();
 let rounds = loadRounds();
 let currentHoleIndex = activeRound?.currentHoleIndex || 0;
@@ -43,13 +70,22 @@ const el = {
   holeTitle: document.getElementById("holeTitle"),
   holePar: document.getElementById("holePar"),
   scoreInput: document.getElementById("scoreInput"),
-  firField: document.getElementById("firField"),
-  driveField: document.getElementById("driveField"),
-  driveDistanceInput: document.getElementById("driveDistanceInput"),
+  pickedUpInput: document.getElementById("pickedUpInput"),
+  pickedUpValue: document.getElementById("pickedUpValue"),
+  fairwayField: document.getElementById("fairwayField"),
+  fairwaySummary: document.getElementById("fairwaySummary"),
+  fairwayFollowup: document.getElementById("fairwayFollowup"),
   approachDistanceInput: document.getElementById("approachDistanceInput"),
-  puttsInput: document.getElementById("puttsInput"),
+  approachSummary: document.getElementById("approachSummary"),
+  approachFollowup: document.getElementById("approachFollowup"),
+  puttChoiceButtons: Array.from(document.querySelectorAll(".putt-choice")),
+  otherPuttsWrap: document.getElementById("otherPuttsWrap"),
+  otherPuttsSelect: document.getElementById("otherPuttsSelect"),
   puttDistanceFields: document.getElementById("puttDistanceFields"),
-  formError: document.getElementById("formError"),
+  penaltyButtons: Array.from(document.querySelectorAll(".penalty-button")),
+  otherPenaltyWrap: document.getElementById("otherPenaltyWrap"),
+  otherPenaltySelect: document.getElementById("otherPenaltySelect"),
+  penaltySummary: document.getElementById("penaltySummary"),
   prevHoleBtn: document.getElementById("prevHoleBtn"),
   nextHoleBtn: document.getElementById("nextHoleBtn"),
   statsGrid: document.getElementById("statsGrid"),
@@ -76,38 +112,51 @@ function bindEvents() {
     tab.addEventListener("click", () => setView(tab.dataset.view));
   });
 
+  document.querySelectorAll("[data-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const current = Number(el.scoreInput.value) || currentHole().par;
+      el.scoreInput.value = Math.max(1, current + Number(button.dataset.step));
+      saveCurrentHole();
+      updateRunningScore();
+    });
+  });
+
+  document.querySelectorAll(".shot-option").forEach((button) => {
+    button.addEventListener("click", () => applyShotSelection(button.dataset.field, button.dataset.value));
+  });
+  document.querySelectorAll(".shot-clear").forEach((button) => {
+    button.addEventListener("click", () => clearShotSelection(button.dataset.field));
+  });
+
   el.startRoundBtn.addEventListener("click", startRound);
-  el.resumeRoundBtn.addEventListener("click", () => showHole());
+  el.resumeRoundBtn.addEventListener("click", showHole);
   el.prevHoleBtn.addEventListener("click", () => {
-    saveCurrentHole(false);
+    saveCurrentHole();
     currentHoleIndex = Math.max(0, currentHoleIndex - 1);
     activeRound.currentHoleIndex = currentHoleIndex;
     persistActiveRound();
     showHole();
   });
 
-  document.querySelectorAll("[data-step]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const current = Number(el.scoreInput.value) || currentHole().par;
-      el.scoreInput.value = Math.max(1, current + Number(button.dataset.step));
-      saveCurrentHole(false);
-      updateRunningScore();
-    });
+  el.pickedUpInput.addEventListener("change", handlePickedUpChange);
+  el.holeForm.addEventListener("input", () => {
+    saveCurrentHole();
+    updateRunningScore();
   });
 
-  el.holeForm.addEventListener("input", () => {
-    saveCurrentHole(false);
-    updateRunningScore();
+  el.puttChoiceButtons.forEach((button) => {
+    button.addEventListener("click", () => handlePuttChoice(button.dataset.puttChoice));
   });
-  el.puttsInput.addEventListener("change", () => {
-    syncPuttInputs();
-    saveCurrentHole(false);
-    updateRunningScore();
+  el.otherPuttsSelect.addEventListener("change", handleOtherPuttsChange);
+
+  el.penaltyButtons.forEach((button) => {
+    button.addEventListener("click", () => handlePenaltySelect(button.dataset.penaltyType));
   });
+  el.otherPenaltySelect.addEventListener("change", handleOtherPenaltyChange);
+
   el.holeForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const saved = saveCurrentHole(true);
-    if (!saved) return;
+    saveCurrentHole();
     if (currentHoleIndex === 17) completeRound();
     else {
       currentHoleIndex += 1;
@@ -136,11 +185,15 @@ function startRound() {
       hole: index + 1,
       par,
       score: null,
-      fir: par === 3 ? null : null,
+      pickedUp: false,
+      fairway: par === 3 ? null : null,
+      fairwayMiss: null,
       gir: null,
-      driveDistance: par === 3 ? null : null,
       approachDistance: null,
       approachHit: null,
+      approachMiss: null,
+      penaltyType: null,
+      penaltyStrokes: null,
       putts: null,
       puttDistances: []
     }))
@@ -158,72 +211,45 @@ function showHole() {
   el.courseName.textContent = activeRound.course;
   el.holeTitle.textContent = `Hole ${hole.hole}`;
   el.holePar.textContent = `Par ${hole.par}`;
-  el.scoreInput.value = hole.score ?? hole.par;
-  el.driveDistanceInput.value = hole.driveDistance ?? "";
+  el.scoreInput.value = hole.score ?? "";
+  el.pickedUpInput.checked = Boolean(hole.pickedUp);
+  el.pickedUpValue.classList.toggle("hidden", !hole.pickedUp);
   el.approachDistanceInput.value = hole.approachDistance ?? "";
-  el.puttsInput.value = hole.putts ?? "";
-  setRadio("fir", hole.fir);
+  el.fairwayField.classList.toggle("hidden", hole.par === 3);
   setRadio("gir", hole.gir);
-  setRadio("approachHit", hole.approachHit);
-  el.firField.classList.toggle("hidden", hole.par === 3);
-  el.driveField.classList.toggle("hidden", hole.par === 3);
-  syncPuttInputs(hole.puttDistances);
+  renderShotUi("fairway", hole.par === 3 ? null : deriveShotState(hole.fairway, hole.fairwayMiss), hole.fairwayMiss);
+  renderShotUi("approach", deriveShotState(hole.approachHit, hole.approachMiss), hole.approachMiss);
+  renderPuttUi(hole.putts, hole.puttDistances);
+  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
   el.prevHoleBtn.disabled = currentHoleIndex === 0;
   el.nextHoleBtn.textContent = currentHoleIndex === 17 ? "Finish round" : "Next hole";
-  el.formError.textContent = "";
   updateRunningScore();
 }
 
-function saveCurrentHole(validate) {
+function saveCurrentHole() {
   if (!activeRound) return false;
   const hole = currentHole();
-  const putts = numberOrNull(el.puttsInput.value);
-  const puttDistances = Array.from(document.querySelectorAll(".putt-distance-input")).map((input) =>
-    numberOrNull(input.value)
-  );
+  const putts = hole.putts;
+  const puttDistances = Array.from(document.querySelectorAll(".putt-distance-input")).map((input) => numberOrNull(input.value));
   const nextHole = {
     ...hole,
     score: numberOrNull(el.scoreInput.value),
-    fir: hole.par === 3 ? null : radioValue("fir"),
+    pickedUp: el.pickedUpInput.checked,
     gir: radioValue("gir"),
-    driveDistance: hole.par === 3 ? null : numberOrNull(el.driveDistanceInput.value),
     approachDistance: numberOrNull(el.approachDistanceInput.value),
-    approachHit: radioValue("approachHit"),
     putts,
-    puttDistances
+    puttDistances: putts === null ? [] : puttDistances.slice(0, putts)
   };
-
-  if (validate) {
-    const error = validateHole(nextHole);
-    if (error) {
-      el.formError.textContent = error;
-      return false;
-    }
-  }
-
   activeRound.holes[currentHoleIndex] = nextHole;
   activeRound.currentHoleIndex = currentHoleIndex;
   persistActiveRound();
   return true;
 }
 
-function validateHole(hole) {
-  if (!positiveNumber(hole.score)) return "Enter a score.";
-  if (hole.par !== 3 && hole.fir === null) return "Select fairway result.";
-  if (hole.gir === null) return "Select GIR result.";
-  if (hole.par !== 3 && !positiveNumber(hole.driveDistance)) return "Enter drive distance.";
-  if (!positiveNumber(hole.approachDistance)) return "Enter approach distance.";
-  if (hole.approachHit === null) return "Select approach result.";
-  if (hole.putts === null || hole.putts < 0) return "Select putts.";
-  if (hole.puttDistances.length !== hole.putts) return "Enter one distance per putt.";
-  if (hole.puttDistances.some((value) => value === null || value < 0)) return "Enter every putt distance.";
-  return "";
-}
-
 function completeRound() {
   const completed = { ...activeRound };
   delete completed.currentHoleIndex;
-  rounds = rounds.filter((round) => round.id !== completed.id).concat(completed);
+  rounds = rounds.filter((round) => round.id !== completed.id).concat(normalizeRound(completed));
   saveRounds();
   activeRound = null;
   localStorage.removeItem(STORAGE_KEYS.activeRound);
@@ -239,7 +265,7 @@ function completeRound() {
 function editRound(roundId) {
   const round = rounds.find((item) => item.id === roundId);
   if (!round) return;
-  activeRound = { ...round, currentHoleIndex: 0 };
+  activeRound = normalizeRound({ ...round, currentHoleIndex: 0 });
   rounds = rounds.filter((item) => item.id !== roundId);
   saveRounds();
   currentHoleIndex = 0;
@@ -256,17 +282,195 @@ function deleteRound(roundId) {
   renderRounds();
 }
 
-function syncPuttInputs(existing = null) {
-  const count = Number(el.puttsInput.value);
-  if (!Number.isInteger(count) || count < 0) {
-    el.puttDistanceFields.innerHTML = "";
+function applyShotSelection(field, value) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (field === "fairway") {
+    if (value === "hit") {
+      hole.fairway = true;
+      hole.fairwayMiss = null;
+    } else {
+      hole.fairway = false;
+      hole.fairwayMiss = value;
+    }
+    renderShotUi("fairway", value, hole.fairwayMiss);
+  } else {
+    if (value === "hit") {
+      hole.approachHit = true;
+      hole.approachMiss = null;
+    } else {
+      hole.approachHit = false;
+      hole.approachMiss = value;
+    }
+    renderShotUi("approach", value, hole.approachMiss);
+  }
+  persistActiveRound();
+}
+
+function clearShotSelection(field) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (field === "fairway") {
+    hole.fairway = null;
+    hole.fairwayMiss = null;
+    renderShotUi("fairway", null, null);
+  } else {
+    hole.approachHit = null;
+    hole.approachMiss = null;
+    renderShotUi("approach", null, null);
+  }
+  persistActiveRound();
+}
+
+function renderShotUi(field, selected, missValue) {
+  document.querySelectorAll(`[data-field="${field}"].shot-option`).forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.value === selected);
+  });
+
+  const summary = field === "fairway" ? el.fairwaySummary : el.approachSummary;
+  const followup = field === "fairway" ? el.fairwayFollowup : el.approachFollowup;
+  const hole = currentHole();
+  const miss = field === "fairway" ? hole.fairwayMiss : hole.approachMiss;
+
+  if (selected === "hit") {
+    summary.textContent = "Hit";
+    followup.innerHTML = "";
+    followup.classList.add("hidden");
     return;
   }
-  const current = existing || Array.from(document.querySelectorAll(".putt-distance-input")).map((input) => input.value);
+  if (!selected) {
+    summary.textContent = "Not set";
+    followup.innerHTML = "";
+    followup.classList.add("hidden");
+    return;
+  }
+
+  summary.textContent = `Miss ${capitalize(selected)}${miss && miss !== selected ? ` · ${formatMissLabel(miss)}` : ""}`;
+  const options = FOLLOW_UP_CONFIG[field][selected];
+  if (!options) {
+    followup.innerHTML = "";
+    followup.classList.add("hidden");
+    return;
+  }
+
+  followup.classList.remove("hidden");
+  followup.innerHTML = options
+    .map(
+      (option) =>
+        `<button class="followup-button${missValue === option.value ? " is-active" : ""}" type="button" data-followup-field="${field}" data-followup-value="${option.value}">${option.label}</button>`
+    )
+    .join("");
+  followup.querySelectorAll("[data-followup-field]").forEach((button) => {
+    button.addEventListener("click", () => applyFollowup(field, button.dataset.followupValue));
+  });
+}
+
+function applyFollowup(field, value) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (field === "fairway") {
+    hole.fairway = false;
+    hole.fairwayMiss = value;
+    renderShotUi("fairway", findPrimaryMiss(value), value);
+  } else {
+    hole.approachHit = false;
+    hole.approachMiss = value;
+    renderShotUi("approach", findPrimaryMiss(value), value);
+  }
+  persistActiveRound();
+}
+
+function handlePickedUpChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.pickedUp = el.pickedUpInput.checked;
+  if (hole.pickedUp) clearHoleValues(hole);
+  persistActiveRound();
+  showHole();
+}
+
+function clearHoleValues(hole) {
+  hole.score = null;
+  hole.fairway = hole.par === 3 ? null : null;
+  hole.fairwayMiss = null;
+  hole.gir = null;
+  hole.approachDistance = null;
+  hole.approachHit = null;
+  hole.approachMiss = null;
+  hole.putts = null;
+  hole.puttDistances = [];
+  hole.penaltyType = null;
+  hole.penaltyStrokes = null;
+}
+
+function handlePuttChoice(choice) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (choice === "clear") hole.putts = null;
+  else if (choice === "other") hole.putts = numberOrNull(el.otherPuttsSelect.value);
+  else hole.putts = Number(choice);
+  renderPuttUi(hole.putts, hole.puttDistances);
+  persistActiveRound();
+}
+
+function handleOtherPuttsChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.putts = numberOrNull(el.otherPuttsSelect.value);
+  renderPuttUi(hole.putts, hole.puttDistances);
+  persistActiveRound();
+}
+
+function renderPuttUi(putts, distances = []) {
+  el.puttChoiceButtons.forEach((button) => {
+    const active = button.dataset.puttChoice === "other" ? putts !== null && ![1, 2, 3].includes(putts) : String(putts) === button.dataset.puttChoice;
+    button.classList.toggle("is-active", active);
+  });
+  el.otherPuttsWrap.classList.toggle("hidden", putts === null || [1, 2, 3].includes(putts));
+  el.otherPuttsSelect.value = putts !== null && ![1, 2, 3].includes(putts) ? String(putts) : "";
+  const count = Number.isInteger(putts) && putts >= 0 ? putts : 0;
   el.puttDistanceFields.innerHTML = Array.from({ length: count }, (_, index) => {
-    const value = current[index] ?? "";
-    return `<div><label for="putt${index}">Putt ${index + 1} ft</label><input id="putt${index}" class="putt-distance-input" type="number" inputmode="numeric" min="0" value="${value}" required></div>`;
+    const value = distances[index] ?? "";
+    return `<div><label for="putt${index}">Putt ${index + 1} ft</label><input id="putt${index}" class="putt-distance-input" type="number" inputmode="numeric" min="0" value="${value}"></div>`;
   }).join("");
+}
+
+function handlePenaltySelect(type) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (hole.penaltyType === type) {
+    hole.penaltyType = null;
+    hole.penaltyStrokes = null;
+  } else {
+    hole.penaltyType = type;
+    hole.penaltyStrokes = type === "other" ? numberOrNull(el.otherPenaltySelect.value) : PENALTY_PRESETS[type];
+  }
+  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
+  persistActiveRound();
+}
+
+function handleOtherPenaltyChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (hole.penaltyType !== "other") return;
+  hole.penaltyStrokes = numberOrNull(el.otherPenaltySelect.value);
+  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
+  persistActiveRound();
+}
+
+function updatePenaltyUi(type, strokes) {
+  el.penaltyButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.penaltyType === type);
+  });
+  el.otherPenaltyWrap.classList.toggle("hidden", type !== "other");
+  el.otherPenaltySelect.value = type === "other" && strokes !== null ? String(strokes) : "";
+  el.penaltySummary.classList.toggle("hidden", !type);
+  if (!type) {
+    el.penaltySummary.textContent = "";
+    return;
+  }
+  const label = type === "threeOffTee" ? "3 off the tee" : type === "lostBall" ? "Lost Ball" : type === "ob" ? "OB" : "Other";
+  el.penaltySummary.textContent = strokes === null ? `${label}` : `${label}: ${strokes}`;
 }
 
 function renderAnalytics() {
@@ -274,7 +478,7 @@ function renderAnalytics() {
   el.statsGrid.innerHTML = [
     ["Rounds", rounds.length],
     ["Scoring Avg", stats.scoringAverage],
-    ["FIR", `${stats.firPct}%`],
+    ["Fairway", `${stats.fairwayPct}%`],
     ["GIR", `${stats.girPct}%`],
     ["Putts/Round", stats.puttsPerRound],
     ["3-Putt Rate", `${stats.threePuttPct}%`]
@@ -282,43 +486,45 @@ function renderAnalytics() {
     .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
 
-  drawChart("scoreTrendChart", "line", rounds.map((round) => round.date), rounds.map(totalScore), "Score");
+  drawChart("scoreTrendChart", "line", rounds.filter(hasRoundScore).map((round) => round.date), rounds.filter(hasRoundScore).map(totalScore), "Score");
   drawChart("approachChart", "bar", stats.approachBuckets.map((item) => item.label), stats.approachBuckets.map((item) => item.hitPct), "Hit %");
   drawChart("puttChart", "bar", stats.puttBuckets.map((item) => item.label), stats.puttBuckets.map((item) => item.avgPutts), "Avg putts");
   drawScatter(
     "girCorrelationChart",
-    rounds.map((round) => ({ x: girCount(round), y: totalScore(round) })),
+    rounds.filter(hasRoundScore).map((round) => ({ x: girCount(round), y: totalScore(round) })),
     "GIR",
     "Score"
   );
   drawScatter(
     "threePuttCorrelationChart",
-    rounds.map((round) => ({ x: threePuttCount(round), y: totalScore(round) })),
+    rounds.filter(hasRoundScore).map((round) => ({ x: threePuttCount(round), y: totalScore(round) })),
     "3-putts",
     "Score"
   );
 }
 
 function calculateStats(sourceRounds) {
-  const holes = sourceRounds.flatMap((round) => round.holes);
-  const scores = sourceRounds.map(totalScore);
-  const firHoles = holes.filter((hole) => hole.fir !== null);
+  const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
+  const scoredRounds = sourceRounds.filter(hasRoundScore);
+  const roundsWithPutts = sourceRounds.filter((round) => round.holes.some((hole) => hole.putts !== null));
+  const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
   const girHoles = holes.filter((hole) => hole.gir !== null);
-  const puttTotal = holes.reduce((sum, hole) => sum + (hole.putts || 0), 0);
-  const threePutts = holes.filter((hole) => hole.putts >= 3).length;
+  const puttHoles = holes.filter((hole) => hole.putts !== null);
+  const puttTotal = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
+  const threePutts = puttHoles.filter((hole) => hole.putts >= 3).length;
 
   return {
-    scoringAverage: average(scores).toFixed(1),
-    firPct: pct(firHoles.filter((hole) => hole.fir).length, firHoles.length),
+    scoringAverage: average(scoredRounds.map(totalScore)).toFixed(1),
+    fairwayPct: pct(fairwayHoles.filter((hole) => hole.fairway).length, fairwayHoles.length),
     girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
-    puttsPerRound: sourceRounds.length ? (puttTotal / sourceRounds.length).toFixed(1) : "0.0",
-    threePuttPct: pct(threePutts, holes.length),
+    puttsPerRound: roundsWithPutts.length ? (puttTotal / roundsWithPutts.length).toFixed(1) : "0.0",
+    threePuttPct: pct(threePutts, puttHoles.length),
     approachBuckets: APPROACH_BUCKETS.map((bucket) => {
-      const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket));
+      const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket) && hole.approachHit !== null);
       return { label: bucket.label, hitPct: pct(bucketHoles.filter((hole) => hole.approachHit).length, bucketHoles.length) };
     }),
     puttBuckets: PUTT_BUCKETS.map((bucket) => {
-      const bucketHoles = holes.filter((hole) => inBucket(hole.puttDistances?.[0], bucket));
+      const bucketHoles = holes.filter((hole) => inBucket(hole.puttDistances?.[0], bucket) && hole.putts !== null);
       return { label: bucket.label, avgPutts: Number(average(bucketHoles.map((hole) => hole.putts)).toFixed(1)) };
     })
   };
@@ -341,7 +547,7 @@ function renderRounds() {
           </div>
           <strong>${formatRelative(totalScore(round), totalPar(round))}</strong>
         </header>
-        <p>${totalScore(round)} shots · ${round.holes.reduce((sum, hole) => sum + (hole.putts || 0), 0)} putts · ${girCount(round)} GIR</p>
+        <p>${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR</p>
         <div class="card-actions">
           <button class="secondary-action" type="button" data-edit="${round.id}">Edit</button>
           <button class="danger-action" type="button" data-delete="${round.id}">Delete</button>
@@ -362,8 +568,8 @@ function drawChart(id, type, labels, data, label) {
       datasets: [{
         label,
         data,
-        borderColor: "#e5b84b",
-        backgroundColor: type === "bar" ? "#54a86a" : "#e5b84b",
+        borderColor: "#1f3d7a",
+        backgroundColor: type === "bar" ? "#1f3d7a" : "#5f83c3",
         tension: 0.25
       }]
     },
@@ -379,8 +585,8 @@ function drawScatter(id, data, xLabel, yLabel) {
       datasets: [{
         label: `${yLabel} vs ${xLabel}`,
         data,
-        borderColor: "#e5b84b",
-        backgroundColor: "#54a86a",
+        borderColor: "#1f3d7a",
+        backgroundColor: "#5f83c3",
         pointRadius: 5
       }]
     },
@@ -399,7 +605,7 @@ function chartOptions() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: "#f6f1df" } }
+      legend: { labels: { color: "#183153" } }
     },
     scales: {
       x: axisOptions(""),
@@ -410,9 +616,9 @@ function chartOptions() {
 
 function axisOptions(title) {
   return {
-    title: { display: Boolean(title), text: title, color: "#b9c2ad" },
-    ticks: { color: "#b9c2ad" },
-    grid: { color: "#314237" }
+    title: { display: Boolean(title), text: title, color: "#38598f" },
+    ticks: { color: "#38598f" },
+    grid: { color: "#dce4f3" }
   };
 }
 
@@ -421,7 +627,25 @@ function exportJson() {
 }
 
 function exportCsv() {
-  const header = ["roundId", "date", "course", "hole", "par", "score", "fir", "gir", "driveDistance", "approachDistance", "approachHit", "putts", "puttDistances"];
+  const header = [
+    "roundId",
+    "date",
+    "course",
+    "hole",
+    "par",
+    "score",
+    "pickedUp",
+    "fairway",
+    "fairwayMiss",
+    "gir",
+    "approachHit",
+    "approachMiss",
+    "approachDistance",
+    "penaltyType",
+    "penaltyStrokes",
+    "putts",
+    "puttDistances"
+  ];
   const rows = rounds.flatMap((round) =>
     round.holes.map((hole) => [
       round.id,
@@ -430,11 +654,15 @@ function exportCsv() {
       hole.hole,
       hole.par,
       hole.score,
-      hole.fir,
+      hole.pickedUp,
+      hole.fairway,
+      hole.fairwayMiss,
       hole.gir,
-      hole.driveDistance,
-      hole.approachDistance,
       hole.approachHit,
+      hole.approachMiss,
+      hole.approachDistance,
+      hole.penaltyType,
+      hole.penaltyStrokes,
       hole.putts,
       (hole.puttDistances || []).join("|")
     ])
@@ -463,14 +691,11 @@ function setView(view) {
 }
 
 function updateRunningScore() {
-  const round = activeRound;
-  if (!round) {
+  if (!activeRound) {
     el.runningScore.textContent = "E";
     return;
   }
-  const score = round.holes.reduce((sum, hole) => sum + (hole.score || 0), 0);
-  const par = round.holes.reduce((sum, hole) => sum + (hole.score ? hole.par : 0), 0);
-  el.runningScore.textContent = formatRelative(score, par);
+  el.runningScore.textContent = formatRelative(totalScore(activeRound), totalPar(activeRound));
 }
 
 function updateResumeButton() {
@@ -491,11 +716,12 @@ function saveMeta() {
 }
 
 function loadRounds() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.rounds) || "[]");
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.rounds) || "[]").map(normalizeRound);
 }
 
 function loadActiveRound() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.activeRound) || "null");
+  const round = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeRound) || "null");
+  return round ? normalizeRound(round) : null;
 }
 
 function currentHole() {
@@ -519,16 +745,12 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function positiveNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
-}
-
 function totalScore(round) {
   return round.holes.reduce((sum, hole) => sum + (hole.score || 0), 0);
 }
 
 function totalPar(round) {
-  return round.holes.reduce((sum, hole) => sum + hole.par, 0);
+  return round.holes.reduce((sum, hole) => sum + (hole.score !== null ? hole.par : 0), 0);
 }
 
 function girCount(round) {
@@ -536,7 +758,15 @@ function girCount(round) {
 }
 
 function threePuttCount(round) {
-  return round.holes.filter((hole) => hole.putts >= 3).length;
+  return round.holes.filter((hole) => hole.putts !== null && hole.putts >= 3).length;
+}
+
+function sumKnownPutts(round) {
+  return round.holes.reduce((sum, hole) => sum + (hole.putts || 0), 0);
+}
+
+function hasRoundScore(round) {
+  return round.holes.some((hole) => hole.score !== null);
 }
 
 function formatRelative(score, par) {
@@ -568,4 +798,49 @@ function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js");
   }
+}
+
+function normalizeRound(round) {
+  return {
+    ...round,
+    holes: (round.holes || []).map(normalizeHole)
+  };
+}
+
+function normalizeHole(hole) {
+  return {
+    ...hole,
+    pickedUp: Boolean(hole.pickedUp),
+    fairway: hole.fairway ?? hole.fir ?? null,
+    fairwayMiss: hole.fairwayMiss ?? null,
+    approachHit: hole.approachHit ?? null,
+    approachMiss: hole.approachMiss ?? null,
+    penaltyType: hole.penaltyType ?? null,
+    penaltyStrokes: hole.penaltyStrokes ?? null,
+    putts: hole.putts ?? null,
+    puttDistances: hole.puttDistances ?? []
+  };
+}
+
+function deriveShotState(hitValue, missValue) {
+  if (hitValue === true) return "hit";
+  if (hitValue === false) return findPrimaryMiss(missValue);
+  return null;
+}
+
+function findPrimaryMiss(value) {
+  if (!value) return null;
+  if (value === "hook" || value === "left") return "left";
+  if (value === "slice" || value === "right") return "right";
+  if (value === "heavy" || value === "top" || value === "short") return "short";
+  return "long";
+}
+
+function formatMissLabel(value) {
+  if (value === "top") return "topped";
+  return capitalize(value);
+}
+
+function capitalize(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
 }

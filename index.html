@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#101612">
+    <meta name="theme-color" content="#ffffff">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ForeBall">
     <title>ForeBall Golf Tracker</title>
     <link rel="manifest" href="manifest.json">
@@ -50,19 +50,36 @@
               <button type="button" class="round-button" data-step="-1" aria-label="Decrease score">-</button>
               <div>
                 <label for="scoreInput">Score</label>
-                <input id="scoreInput" name="score" type="number" inputmode="numeric" min="1" required>
+                <input id="scoreInput" name="score" type="number" inputmode="numeric" min="1">
               </div>
               <button type="button" class="round-button" data-step="1" aria-label="Increase score">+</button>
             </div>
 
+            <fieldset>
+              <legend>Picked up</legend>
+              <div class="binary-row">
+                <label class="toggle-chip"><input type="checkbox" id="pickedUpInput">Picked up</label>
+              </div>
+              <p class="detail-value hidden" id="pickedUpValue">This hole is excluded from averages unless you enter data.</p>
+            </fieldset>
+
             <div class="toggle-grid">
-              <fieldset id="firField">
+              <fieldset id="fairwayField">
                 <legend>Fairway</legend>
-                <div class="segmented">
-                  <label><input type="radio" name="fir" value="true">Yes</label>
-                  <label><input type="radio" name="fir" value="false">No</label>
+                <div class="shot-wheel">
+                  <button class="shot-option pos-top" type="button" data-field="fairway" data-value="long">Miss Long</button>
+                  <button class="shot-option pos-left" type="button" data-field="fairway" data-value="left">Miss Left</button>
+                  <button class="shot-option pos-right" type="button" data-field="fairway" data-value="right">Miss Right</button>
+                  <button class="shot-option pos-bottom" type="button" data-field="fairway" data-value="short">Miss Short</button>
+                  <button class="shot-option shot-center" type="button" data-field="fairway" data-value="hit">Hit</button>
                 </div>
+                <div class="field-meta">
+                  <p class="selection-summary" id="fairwaySummary">Not set</p>
+                  <button class="link-clear shot-clear" type="button" data-field="fairway">Clear</button>
+                </div>
+                <div class="followup-row hidden" id="fairwayFollowup"></div>
               </fieldset>
+
               <fieldset>
                 <legend>GIR</legend>
                 <div class="segmented">
@@ -72,40 +89,72 @@
               </fieldset>
             </div>
 
-            <div class="field-grid">
-              <div id="driveField">
-                <label for="driveDistanceInput">Drive yards</label>
-                <input id="driveDistanceInput" name="driveDistance" type="number" inputmode="numeric" min="1">
-              </div>
-              <div>
-                <label for="approachDistanceInput">Approach yards</label>
-                <input id="approachDistanceInput" name="approachDistance" type="number" inputmode="numeric" min="1" required>
-              </div>
+            <div>
+              <label for="approachDistanceInput">Approach yards</label>
+              <input id="approachDistanceInput" name="approachDistance" type="number" inputmode="numeric" min="1">
             </div>
 
             <fieldset>
-              <legend>Approach hit</legend>
-              <div class="segmented">
-                <label><input type="radio" name="approachHit" value="true">Hit</label>
-                <label><input type="radio" name="approachHit" value="false">Miss</label>
+              <legend>Approach</legend>
+              <div class="shot-wheel">
+                <button class="shot-option pos-top" type="button" data-field="approach" data-value="long">Miss Long</button>
+                <button class="shot-option pos-left" type="button" data-field="approach" data-value="left">Miss Left</button>
+                <button class="shot-option pos-right" type="button" data-field="approach" data-value="right">Miss Right</button>
+                <button class="shot-option pos-bottom" type="button" data-field="approach" data-value="short">Miss Short</button>
+                <button class="shot-option shot-center" type="button" data-field="approach" data-value="hit">Hit</button>
               </div>
+              <div class="field-meta">
+                <p class="selection-summary" id="approachSummary">Not set</p>
+                <button class="link-clear shot-clear" type="button" data-field="approach">Clear</button>
+              </div>
+              <div class="followup-row hidden" id="approachFollowup"></div>
             </fieldset>
 
-            <div class="putt-row">
-              <label for="puttsInput">Putts</label>
-              <select id="puttsInput" name="putts" required>
-                <option value="">Select</option>
-                <option value="0">0</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </select>
-            </div>
+            <fieldset>
+              <legend>Putts</legend>
+              <div class="putt-choice-row">
+                <button class="putt-choice" type="button" data-putt-choice="1">1</button>
+                <button class="putt-choice" type="button" data-putt-choice="2">2</button>
+                <button class="putt-choice" type="button" data-putt-choice="3">3</button>
+                <button class="putt-choice" type="button" data-putt-choice="other">Other</button>
+              </div>
+              <div class="hidden" id="otherPuttsWrap">
+                <label for="otherPuttsSelect">Putts</label>
+                <select id="otherPuttsSelect">
+                  <option value="">Select</option>
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                </select>
+              </div>
+            </fieldset>
             <div id="puttDistanceFields" class="putt-distance-grid"></div>
 
-            <p class="form-error" id="formError" aria-live="polite"></p>
+            <fieldset>
+              <legend>Penalty</legend>
+              <div class="penalty-grid">
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="threeOffTee">3 off the tee</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="lostBall">Lost Ball</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="ob">OB</button>
+                <button class="secondary-action penalty-button" type="button" data-penalty-type="other">Other</button>
+              </div>
+              <div class="hidden" id="otherPenaltyWrap">
+                <label for="otherPenaltySelect">Penalty shots</label>
+                <select id="otherPenaltySelect">
+                  <option value="">Select</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+              <p class="detail-value hidden" id="penaltySummary"></p>
+            </fieldset>
 
             <div class="action-row">
               <button class="secondary-action" type="button" id="prevHoleBtn">Previous</button>
