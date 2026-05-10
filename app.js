@@ -5,11 +5,48 @@ const STORAGE_KEYS = {
 };
 
 const COURSES = [
-  { name: "North Berwick", pars: [4, 4, 4, 4, 4, 3, 4, 4, 5, 4, 3, 5, 4, 4, 3, 4, 4, 4] },
-  { name: "Gullane 1", pars: [4, 4, 4, 5, 3, 4, 4, 4, 4, 4, 3, 4, 5, 4, 4, 4, 3, 4] },
-  { name: "Gullane 2", pars: [4, 4, 3, 4, 5, 4, 4, 3, 4, 4, 4, 5, 3, 4, 4, 4, 4, 4] },
-  { name: "Muirfield", pars: [4, 4, 4, 3, 5, 4, 3, 4, 5, 4, 4, 4, 3, 4, 4, 4, 5, 4] },
-  { name: "Gosforth", pars: [4, 4, 3, 4, 4, 5, 4, 3, 4, 4, 5, 4, 3, 4, 4, 4, 3, 4] }
+  {
+    name: "North Berwick",
+    pars: [4, 4, 4, 3, 4, 3, 4, 5, 5, 3, 5, 4, 4, 4, 3, 4, 4, 4],
+    strokeIndexes: [9, 11, 1, 15, 5, 17, 3, 13, 7, 18, 2, 8, 12, 6, 14, 4, 10, 16],
+    lengths: [312, 414, 444, 168, 359, 139, 344, 487, 502, 153, 523, 363, 362, 359, 178, 360, 405, 268]
+  },
+  {
+    name: "Gullane 1",
+    pars: [4, 4, 5, 3, 4, 4, 4, 4, 3, 4, 4, 5, 3, 4, 5, 3, 4, 4],
+    strokeIndexes: [14, 4, 8, 18, 1, 16, 10, 6, 12, 2, 7, 11, 15, 3, 9, 13, 5, 17],
+    lengths: [287, 345, 479, 134, 436, 299, 398, 398, 141, 434, 427, 423, 160, 409, 487, 177, 390, 338]
+  },
+  {
+    name: "Gullane 2",
+    pars: [4, 4, 4, 4, 3, 5, 4, 4, 4, 4, 3, 4, 4, 4, 3, 5, 4, 4],
+    strokeIndexes: [9, 7, 13, 1, 17, 5, 15, 3, 11, 6, 16, 10, 2, 12, 18, 4, 8, 14],
+    lengths: [356, 326, 233, 425, 171, 498, 358, 352, 347, 340, 194, 376, 384, 336, 167, 471, 351, 291]
+  },
+  {
+    name: "Gullane 3",
+    pars: [4, 3, 4, 4, 4, 4, 4, 3, 4, 4, 3, 4, 3, 5, 3, 4, 4, 3],
+    strokeIndexes: [3, 17, 5, 13, 7, 1, 11, 15, 9, 4, 18, 8, 14, 2, 12, 6, 10, 16],
+    lengths: [341, 144, 293, 250, 314, 342, 311, 165, 327, 450, 135, 371, 186, 443, 176, 379, 328, 179]
+  },
+  {
+    name: "Muirfield",
+    pars: [4, 4, 4, 3, 5, 4, 3, 4, 5, 4, 4, 4, 3, 4, 4, 3, 5, 4],
+    strokeIndexes: [5, 17, 11, 13, 7, 3, 15, 1, 9, 4, 18, 16, 14, 2, 8, 12, 10, 6],
+    lengths: [446, 365, 377, 182, 510, 440, 147, 443, 505, 470, 354, 380, 156, 449, 394, 186, 506, 418]
+  },
+  {
+    name: "Parklands Golf Club",
+    pars: [4, 4, 4, 4, 4, 4, 5, 3, 5, 4, 5, 3, 4, 3, 4, 4, 4, 3],
+    strokeIndexes: [13, 3, 17, 5, 9, 1, 15, 11, 7, 2, 14, 10, 16, 4, 18, 6, 12, 8],
+    lengths: [300, 300, 281, 331, 354, 360, 467, 162, 504, 453, 498, 149, 364, 140, 287, 336, 338, 192]
+  },
+  {
+    name: "Newcastle United Golf Club",
+    pars: [4, 4, 4, 3, 4, 5, 3, 4, 5, 5, 4, 4, 5, 3, 3, 4, 4, 4],
+    strokeIndexes: [8, 3, 17, 15, 14, 11, 16, 1, 4, 10, 13, 7, 12, 6, 18, 9, 5, 2],
+    lengths: [383, 387, 347, 150, 349, 514, 156, 422, 546, 547, 342, 347, 497, 186, 118, 372, 352, 407]
+  }
 ];
 
 const APPROACH_BUCKETS = [
@@ -57,8 +94,26 @@ let activeRound = loadActiveRound();
 let rounds = loadRounds();
 let currentHoleIndex = activeRound?.currentHoleIndex || 0;
 let charts = {};
+let pendingConfirmAction = null;
+
+window.__debugClick = function debugClick(label) {
+  const url = `/__debug_click__?button=${encodeURIComponent(label)}&ts=${Date.now()}`;
+  fetch(url, { method: "GET", cache: "no-store" }).catch(() => {});
+  console.log("debug click:", label);
+};
+
+window.__menuClick = function menuClick(event) {
+  console.log("menu action");
+  toggleRoundMenu(event);
+};
+
+window.__nextClick = function nextClick(event) {
+  console.log("next action");
+  goNextHole(event);
+};
 
 const el = {
+  brandHomeBtn: document.getElementById("brandHomeBtn"),
   screenTitle: document.getElementById("screenTitle"),
   runningScore: document.getElementById("runningScore"),
   courseSelect: document.getElementById("courseSelect"),
@@ -68,30 +123,49 @@ const el = {
   holeForm: document.getElementById("holeForm"),
   courseName: document.getElementById("courseName"),
   holeTitle: document.getElementById("holeTitle"),
+  holeLength: document.getElementById("holeLength"),
+  holeStrokeIndex: document.getElementById("holeStrokeIndex"),
   holePar: document.getElementById("holePar"),
+  topPrevHoleBtn: document.getElementById("topPrevHoleBtn"),
+  roundMenuBtn: document.getElementById("roundMenuBtn"),
+  roundMenu: document.getElementById("roundMenu"),
+  menuPickedUpBtn: document.getElementById("menuPickedUpBtn"),
+  menuRestartRoundBtn: document.getElementById("menuRestartRoundBtn"),
+  menuCancelRoundBtn: document.getElementById("menuCancelRoundBtn"),
   scoreInput: document.getElementById("scoreInput"),
-  pickedUpInput: document.getElementById("pickedUpInput"),
   pickedUpValue: document.getElementById("pickedUpValue"),
   fairwayField: document.getElementById("fairwayField"),
-  fairwaySummary: document.getElementById("fairwaySummary"),
   fairwayFollowup: document.getElementById("fairwayFollowup"),
   approachDistanceInput: document.getElementById("approachDistanceInput"),
-  approachSummary: document.getElementById("approachSummary"),
   approachFollowup: document.getElementById("approachFollowup"),
   puttChoiceButtons: Array.from(document.querySelectorAll(".putt-choice")),
   otherPuttsWrap: document.getElementById("otherPuttsWrap"),
   otherPuttsSelect: document.getElementById("otherPuttsSelect"),
   puttDistanceFields: document.getElementById("puttDistanceFields"),
+  chipChoiceButtons: Array.from(document.querySelectorAll(".chip-choice")),
+  otherChipsWrap: document.getElementById("otherChipsWrap"),
+  otherChipsSelect: document.getElementById("otherChipsSelect"),
+  chipTypeFields: document.getElementById("chipTypeFields"),
+  bunkerChoiceButtons: Array.from(document.querySelectorAll(".bunker-choice")),
+  otherBunkerWrap: document.getElementById("otherBunkerWrap"),
+  otherBunkerSelect: document.getElementById("otherBunkerSelect"),
   penaltyButtons: Array.from(document.querySelectorAll(".penalty-button")),
   otherPenaltyWrap: document.getElementById("otherPenaltyWrap"),
   otherPenaltySelect: document.getElementById("otherPenaltySelect"),
   penaltySummary: document.getElementById("penaltySummary"),
   prevHoleBtn: document.getElementById("prevHoleBtn"),
   nextHoleBtn: document.getElementById("nextHoleBtn"),
+  dashboardStats: document.getElementById("dashboardStats"),
+  dashboardRecent: document.getElementById("dashboardRecent"),
   statsGrid: document.getElementById("statsGrid"),
   roundList: document.getElementById("roundList"),
   exportJsonBtn: document.getElementById("exportJsonBtn"),
-  exportCsvBtn: document.getElementById("exportCsvBtn")
+  exportCsvBtn: document.getElementById("exportCsvBtn"),
+  confirmModal: document.getElementById("confirmModal"),
+  confirmModalTitle: document.getElementById("confirmModalTitle"),
+  confirmModalMessage: document.getElementById("confirmModalMessage"),
+  confirmModalCancelBtn: document.getElementById("confirmModalCancelBtn"),
+  confirmModalConfirmBtn: document.getElementById("confirmModalConfirmBtn")
 };
 
 init();
@@ -102,8 +176,10 @@ function init() {
   bindEvents();
   updateResumeButton();
   if (activeRound) showHole();
+  renderDashboard();
   renderAnalytics();
   renderRounds();
+  setView("dashboard");
   registerServiceWorker();
 }
 
@@ -111,11 +187,19 @@ function bindEvents() {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => setView(tab.dataset.view));
   });
+  el.brandHomeBtn.addEventListener("click", () => setView("dashboard"));
+  document.querySelectorAll("[data-dashboard-view]").forEach((button) => {
+    button.addEventListener("click", () => setView(button.dataset.dashboardView));
+  });
 
   document.querySelectorAll("[data-step]").forEach((button) => {
     button.addEventListener("click", () => {
-      const current = Number(el.scoreInput.value) || currentHole().par;
-      el.scoreInput.value = Math.max(1, current + Number(button.dataset.step));
+      const currentValue = numberOrNull(el.scoreInput.value);
+      if (currentValue === null) {
+        el.scoreInput.value = currentHole().par;
+      } else {
+        el.scoreInput.value = Math.max(1, currentValue + Number(button.dataset.step));
+      }
       saveCurrentHole();
       updateRunningScore();
     });
@@ -127,18 +211,31 @@ function bindEvents() {
   document.querySelectorAll(".shot-clear").forEach((button) => {
     button.addEventListener("click", () => clearShotSelection(button.dataset.field));
   });
+  bindToggleableGir();
 
   el.startRoundBtn.addEventListener("click", startRound);
   el.resumeRoundBtn.addEventListener("click", showHole);
-  el.prevHoleBtn.addEventListener("click", () => {
+  el.holePar.addEventListener("click", () => {
+    if (!activeRound) return;
+    el.scoreInput.value = currentHole().par;
     saveCurrentHole();
-    currentHoleIndex = Math.max(0, currentHoleIndex - 1);
-    activeRound.currentHoleIndex = currentHoleIndex;
-    persistActiveRound();
-    showHole();
+    updateRunningScore();
   });
+  el.prevHoleBtn.onclick = goPrevHole;
+  el.topPrevHoleBtn.onclick = goPrevHole;
+  el.topNextHoleBtn.onclick = goNextHole;
+  el.nextHoleBtn.onclick = goNextHole;
+  el.roundMenuBtn.addEventListener("click", toggleRoundMenu);
+  el.menuPickedUpBtn.addEventListener("click", togglePickedUpFromMenu);
+  el.menuRestartRoundBtn.addEventListener("click", () => openConfirmModal("restart"));
+  el.menuCancelRoundBtn.addEventListener("click", () => openConfirmModal("cancel"));
+  el.confirmModalCancelBtn.addEventListener("click", closeConfirmModal);
+  el.confirmModalConfirmBtn.addEventListener("click", runConfirmedAction);
+  el.confirmModal.addEventListener("click", (event) => {
+    if (event.target === el.confirmModal) closeConfirmModal();
+  });
+  document.addEventListener("click", handleDocumentClick);
 
-  el.pickedUpInput.addEventListener("change", handlePickedUpChange);
   el.holeForm.addEventListener("input", () => {
     saveCurrentHole();
     updateRunningScore();
@@ -148,23 +245,19 @@ function bindEvents() {
     button.addEventListener("click", () => handlePuttChoice(button.dataset.puttChoice));
   });
   el.otherPuttsSelect.addEventListener("change", handleOtherPuttsChange);
+  el.chipChoiceButtons.forEach((button) => {
+    button.addEventListener("click", () => handleChipChoice(button.dataset.chipChoice));
+  });
+  el.otherChipsSelect.addEventListener("change", handleOtherChipsChange);
+  el.bunkerChoiceButtons.forEach((button) => {
+    button.addEventListener("click", () => handleBunkerChoice(button.dataset.bunkerChoice));
+  });
+  el.otherBunkerSelect.addEventListener("change", handleOtherBunkerChange);
 
   el.penaltyButtons.forEach((button) => {
     button.addEventListener("click", () => handlePenaltySelect(button.dataset.penaltyType));
   });
   el.otherPenaltySelect.addEventListener("change", handleOtherPenaltyChange);
-
-  el.holeForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    saveCurrentHole();
-    if (currentHoleIndex === 17) completeRound();
-    else {
-      currentHoleIndex += 1;
-      activeRound.currentHoleIndex = currentHoleIndex;
-      persistActiveRound();
-      showHole();
-    }
-  });
 
   el.exportJsonBtn.addEventListener("click", exportJson);
   el.exportCsvBtn.addEventListener("click", exportCsv);
@@ -176,7 +269,37 @@ function populateCourses() {
 
 function startRound() {
   const course = COURSES.find((item) => item.name === el.courseSelect.value);
-  activeRound = {
+  activeRound = createRoundState(course);
+  currentHoleIndex = 0;
+  persistActiveRound();
+  showHole();
+}
+
+function goPrevHole(event) {
+  if (event) event.preventDefault();
+  if (!activeRound) return;
+  saveCurrentHole();
+  currentHoleIndex = Math.max(0, currentHoleIndex - 1);
+  activeRound.currentHoleIndex = currentHoleIndex;
+  persistActiveRound();
+  showHole();
+}
+
+function goNextHole(event) {
+  if (event) event.preventDefault();
+  if (!activeRound) return;
+  saveCurrentHole();
+  if (currentHoleIndex === 17) completeRound();
+  else {
+    currentHoleIndex += 1;
+    activeRound.currentHoleIndex = currentHoleIndex;
+    persistActiveRound();
+    showHole();
+  }
+}
+
+function createRoundState(course) {
+  return {
     id: `round_${Date.now()}`,
     date: new Date().toISOString().slice(0, 10),
     course: course.name,
@@ -184,6 +307,8 @@ function startRound() {
     holes: course.pars.map((par, index) => ({
       hole: index + 1,
       par,
+      strokeIndex: course.strokeIndexes?.[index] ?? null,
+      length: course.lengths?.[index] ?? null,
       score: null,
       pickedUp: false,
       fairway: par === 3 ? null : null,
@@ -192,15 +317,18 @@ function startRound() {
       approachDistance: null,
       approachHit: null,
       approachMiss: null,
+      chips: null,
+      chipsEntryMode: null,
+      chipTypes: [],
+      greensideBunker: null,
+      bunkerEntryMode: null,
       penaltyType: null,
       penaltyStrokes: null,
+      puttsEntryMode: null,
       putts: null,
       puttDistances: []
     }))
   };
-  currentHoleIndex = 0;
-  persistActiveRound();
-  showHole();
 }
 
 function showHole() {
@@ -210,19 +338,25 @@ function showHole() {
   el.holeForm.classList.remove("hidden");
   el.courseName.textContent = activeRound.course;
   el.holeTitle.textContent = `Hole ${hole.hole}`;
+  el.holeLength.textContent = hole.length ? `Length: ${hole.length} yds` : "Length: -- yds";
+  el.holeStrokeIndex.textContent = hole.strokeIndex ? `S.I.: ${hole.strokeIndex}` : "S.I.: --";
   el.holePar.textContent = `Par ${hole.par}`;
   el.scoreInput.value = hole.score ?? "";
-  el.pickedUpInput.checked = Boolean(hole.pickedUp);
   el.pickedUpValue.classList.toggle("hidden", !hole.pickedUp);
+  el.menuPickedUpBtn.classList.toggle("is-active", Boolean(hole.pickedUp));
   el.approachDistanceInput.value = hole.approachDistance ?? "";
   el.fairwayField.classList.toggle("hidden", hole.par === 3);
   setRadio("gir", hole.gir);
   renderShotUi("fairway", hole.par === 3 ? null : deriveShotState(hole.fairway, hole.fairwayMiss), hole.fairwayMiss);
   renderShotUi("approach", deriveShotState(hole.approachHit, hole.approachMiss), hole.approachMiss);
-  renderPuttUi(hole.putts, hole.puttDistances);
+  renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
+  renderChipUi(hole.chips, hole.chipTypes, hole.chipsEntryMode);
+  renderBunkerUi(hole.greensideBunker, hole.bunkerEntryMode);
   updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
   el.prevHoleBtn.disabled = currentHoleIndex === 0;
-  el.nextHoleBtn.textContent = currentHoleIndex === 17 ? "Finish round" : "Next hole";
+  el.topPrevHoleBtn.disabled = currentHoleIndex === 0;
+  el.nextHoleBtn.textContent = currentHoleIndex === 17 ? "Finish" : "Next";
+  closeRoundMenu();
   updateRunningScore();
 }
 
@@ -234,9 +368,15 @@ function saveCurrentHole() {
   const nextHole = {
     ...hole,
     score: numberOrNull(el.scoreInput.value),
-    pickedUp: el.pickedUpInput.checked,
+    pickedUp: hole.pickedUp,
     gir: radioValue("gir"),
-    approachDistance: numberOrNull(el.approachDistanceInput.value),
+    approachDistance: limitNumberOrNull(el.approachDistanceInput.value, 999),
+    chips: hole.chips ?? null,
+    chipsEntryMode: hole.chipsEntryMode ?? null,
+    chipTypes: hole.chipTypes ?? [],
+    greensideBunker: hole.greensideBunker ?? null,
+    bunkerEntryMode: hole.bunkerEntryMode ?? null,
+    puttsEntryMode: hole.puttsEntryMode ?? null,
     putts,
     puttDistances: putts === null ? [] : puttDistances.slice(0, putts)
   };
@@ -257,6 +397,7 @@ function completeRound() {
   el.holeForm.classList.add("hidden");
   el.startPanel.classList.remove("hidden");
   updateResumeButton();
+  renderDashboard();
   renderAnalytics();
   renderRounds();
   setView("rounds");
@@ -270,6 +411,7 @@ function editRound(roundId) {
   saveRounds();
   currentHoleIndex = 0;
   persistActiveRound();
+  renderDashboard();
   setView("scorecard");
   showHole();
 }
@@ -278,6 +420,7 @@ function deleteRound(roundId) {
   if (!confirm("Delete this round?")) return;
   rounds = rounds.filter((round) => round.id !== roundId);
   saveRounds();
+  renderDashboard();
   renderAnalytics();
   renderRounds();
 }
@@ -285,6 +428,11 @@ function deleteRound(roundId) {
 function applyShotSelection(field, value) {
   if (!activeRound) return;
   const hole = currentHole();
+  const currentSelection = field === "fairway" ? deriveShotState(hole.fairway, hole.fairwayMiss) : deriveShotState(hole.approachHit, hole.approachMiss);
+  if (currentSelection === value) {
+    clearShotSelection(field);
+    return;
+  }
   if (field === "fairway") {
     if (value === "hit") {
       hole.fairway = true;
@@ -327,25 +475,20 @@ function renderShotUi(field, selected, missValue) {
     button.classList.toggle("is-active", button.dataset.value === selected);
   });
 
-  const summary = field === "fairway" ? el.fairwaySummary : el.approachSummary;
   const followup = field === "fairway" ? el.fairwayFollowup : el.approachFollowup;
   const hole = currentHole();
-  const miss = field === "fairway" ? hole.fairwayMiss : hole.approachMiss;
 
   if (selected === "hit") {
-    summary.textContent = "Hit";
     followup.innerHTML = "";
     followup.classList.add("hidden");
     return;
   }
   if (!selected) {
-    summary.textContent = "Not set";
     followup.innerHTML = "";
     followup.classList.add("hidden");
     return;
   }
 
-  summary.textContent = `Miss ${capitalize(selected)}${miss && miss !== selected ? ` · ${formatMissLabel(miss)}` : ""}`;
   const options = FOLLOW_UP_CONFIG[field][selected];
   if (!options) {
     followup.innerHTML = "";
@@ -368,6 +511,11 @@ function renderShotUi(field, selected, missValue) {
 function applyFollowup(field, value) {
   if (!activeRound) return;
   const hole = currentHole();
+  const currentValue = field === "fairway" ? hole.fairwayMiss : hole.approachMiss;
+  if (currentValue === value) {
+    clearShotSelection(field);
+    return;
+  }
   if (field === "fairway") {
     hole.fairway = false;
     hole.fairwayMiss = value;
@@ -380,13 +528,19 @@ function applyFollowup(field, value) {
   persistActiveRound();
 }
 
-function handlePickedUpChange() {
-  if (!activeRound) return;
-  const hole = currentHole();
-  hole.pickedUp = el.pickedUpInput.checked;
-  if (hole.pickedUp) clearHoleValues(hole);
-  persistActiveRound();
-  showHole();
+function bindToggleableGir() {
+  document.querySelectorAll('input[name="gir"]').forEach((input) => {
+    const label = input.closest("label");
+    label.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!activeRound) return;
+      const nextValue = input.checked ? null : input.value === "true";
+      setRadio("gir", nextValue);
+      handleGirChange();
+      saveCurrentHole();
+      updateRunningScore();
+    });
+  });
 }
 
 function clearHoleValues(hole) {
@@ -397,42 +551,266 @@ function clearHoleValues(hole) {
   hole.approachDistance = null;
   hole.approachHit = null;
   hole.approachMiss = null;
+  hole.chips = null;
+  hole.chipsEntryMode = null;
+  hole.chipTypes = [];
+  hole.greensideBunker = null;
+  hole.bunkerEntryMode = null;
   hole.putts = null;
   hole.puttDistances = [];
   hole.penaltyType = null;
   hole.penaltyStrokes = null;
 }
 
+function toggleRoundMenu(event) {
+  event.stopPropagation();
+  const open = el.roundMenu.classList.contains("hidden");
+  el.roundMenu.classList.toggle("hidden", !open);
+  el.roundMenuBtn.setAttribute("aria-expanded", String(open));
+}
+
+function closeRoundMenu() {
+  el.roundMenu.classList.add("hidden");
+  el.roundMenuBtn.setAttribute("aria-expanded", "false");
+}
+
+function handleDocumentClick(event) {
+  if (!event.target.closest(".menu-anchor")) closeRoundMenu();
+}
+
+function togglePickedUpFromMenu() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.pickedUp = !hole.pickedUp;
+  if (hole.pickedUp) clearHoleValues(hole);
+  persistActiveRound();
+  closeRoundMenu();
+  showHole();
+}
+
+function openConfirmModal(action) {
+  pendingConfirmAction = action;
+  el.confirmModalTitle.textContent = action === "restart" ? "Restart round?" : "Cancel round?";
+  el.confirmModalMessage.textContent = `Are you sure you want to ${action} round? If you do, existing data from this round will be permanently lost.`;
+  el.confirmModalConfirmBtn.textContent = action === "restart" ? "Restart round" : "Delete round";
+  el.confirmModal.classList.remove("hidden");
+  closeRoundMenu();
+}
+
+function closeConfirmModal() {
+  pendingConfirmAction = null;
+  el.confirmModal.classList.add("hidden");
+}
+
+function runConfirmedAction() {
+  if (pendingConfirmAction === "restart") restartActiveRound();
+  if (pendingConfirmAction === "cancel") cancelActiveRound();
+  closeConfirmModal();
+}
+
+function restartActiveRound() {
+  if (!activeRound) return;
+  const course = COURSES.find((item) => item.name === activeRound.course);
+  if (!course) return;
+  activeRound = createRoundState(course);
+  currentHoleIndex = 0;
+  persistActiveRound();
+  showHole();
+}
+
+function cancelActiveRound() {
+  activeRound = null;
+  currentHoleIndex = 0;
+  localStorage.removeItem(STORAGE_KEYS.activeRound);
+  el.holeForm.classList.add("hidden");
+  el.startPanel.classList.remove("hidden");
+  updateResumeButton();
+  renderDashboard();
+  setView("scorecard");
+}
+
 function handlePuttChoice(choice) {
   if (!activeRound) return;
   const hole = currentHole();
-  if (choice === "clear") hole.putts = null;
-  else if (choice === "other") hole.putts = numberOrNull(el.otherPuttsSelect.value);
-  else hole.putts = Number(choice);
-  renderPuttUi(hole.putts, hole.puttDistances);
+  if (choice === "other") {
+    if (hole.puttsEntryMode === "other") {
+      hole.puttsEntryMode = null;
+      hole.putts = null;
+    } else {
+      hole.puttsEntryMode = "other";
+      hole.putts = numberOrNull(el.otherPuttsSelect.value);
+    }
+  } else if (hole.puttsEntryMode === "preset" && hole.putts === Number(choice)) {
+    hole.puttsEntryMode = null;
+    hole.putts = null;
+  } else {
+    hole.puttsEntryMode = "preset";
+    hole.putts = Number(choice);
+  }
+  renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
   persistActiveRound();
 }
 
 function handleOtherPuttsChange() {
   if (!activeRound) return;
   const hole = currentHole();
+  hole.puttsEntryMode = "other";
   hole.putts = numberOrNull(el.otherPuttsSelect.value);
-  renderPuttUi(hole.putts, hole.puttDistances);
+  renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
   persistActiveRound();
 }
 
-function renderPuttUi(putts, distances = []) {
+function renderPuttUi(putts, distances = [], entryMode = null) {
   el.puttChoiceButtons.forEach((button) => {
-    const active = button.dataset.puttChoice === "other" ? putts !== null && ![1, 2, 3].includes(putts) : String(putts) === button.dataset.puttChoice;
+    const active = button.dataset.puttChoice === "other" ? entryMode === "other" : String(putts) === button.dataset.puttChoice;
     button.classList.toggle("is-active", active);
   });
-  el.otherPuttsWrap.classList.toggle("hidden", putts === null || [1, 2, 3].includes(putts));
-  el.otherPuttsSelect.value = putts !== null && ![1, 2, 3].includes(putts) ? String(putts) : "";
+  el.otherPuttsWrap.classList.toggle("hidden", entryMode !== "other");
+  el.otherPuttsSelect.value = entryMode === "other" && putts !== null ? String(putts) : "";
   const count = Number.isInteger(putts) && putts >= 0 ? putts : 0;
   el.puttDistanceFields.innerHTML = Array.from({ length: count }, (_, index) => {
     const value = distances[index] ?? "";
-    return `<div><label for="putt${index}">Putt ${index + 1} ft</label><input id="putt${index}" class="putt-distance-input" type="number" inputmode="numeric" min="0" value="${value}"></div>`;
+    return `<div><label for="putt${index}">Putt ${index + 1} length (ft)</label><input id="putt${index}" class="putt-distance-input" type="number" inputmode="numeric" min="0" value="${value}"></div>`;
   }).join("");
+}
+
+function handleChipChoice(choice) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (choice === "other") {
+    if (hole.chipsEntryMode === "other") {
+      hole.chipsEntryMode = null;
+      hole.chips = null;
+    } else {
+      hole.chipsEntryMode = "other";
+      hole.chips = numberOrNull(el.otherChipsSelect.value);
+    }
+  } else if (hole.chipsEntryMode === "preset" && hole.chips === Number(choice)) {
+    hole.chipsEntryMode = null;
+    hole.chips = null;
+  } else {
+    hole.chipsEntryMode = "preset";
+    hole.chips = Number(choice);
+  }
+  if (!hole.chips) hole.chipTypes = [];
+  renderChipUi(hole.chips, hole.chipTypes, hole.chipsEntryMode);
+  persistActiveRound();
+}
+
+function handleOtherChipsChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.chipsEntryMode = "other";
+  hole.chips = numberOrNull(el.otherChipsSelect.value);
+  if (!hole.chips) hole.chipTypes = [];
+  renderChipUi(hole.chips, hole.chipTypes, hole.chipsEntryMode);
+  persistActiveRound();
+}
+
+function handleChipTypeChange(index, value) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.chipTypes[index] = value || null;
+  persistActiveRound();
+}
+
+function renderChipUi(chips, chipTypes = [], entryMode = null) {
+  el.chipChoiceButtons.forEach((button) => {
+    const active = button.dataset.chipChoice === "other" ? entryMode === "other" : String(chips) === button.dataset.chipChoice;
+    button.classList.toggle("is-active", active);
+  });
+  el.otherChipsWrap.classList.toggle("hidden", entryMode !== "other");
+  el.otherChipsSelect.value = entryMode === "other" && chips !== null ? String(chips) : "";
+  const showTypes = Number.isInteger(chips) && chips > 0;
+  el.chipTypeFields.classList.toggle("hidden", !showTypes);
+  if (!showTypes) {
+    el.chipTypeFields.innerHTML = "";
+    return;
+  }
+  el.chipTypeFields.innerHTML = Array.from({ length: chips }, (_, index) => `
+    <div>
+      <label for="chipType${index}">Chip ${index + 1} type</label>
+      <select id="chipType${index}" data-chip-index="${index}">
+        <option value="">Select</option>
+        <option value="regular" ${chipTypes[index] === "regular" ? "selected" : ""}>Regular</option>
+        <option value="bumpRun" ${chipTypes[index] === "bumpRun" ? "selected" : ""}>Bump and run</option>
+        <option value="flop" ${chipTypes[index] === "flop" ? "selected" : ""}>Flop</option>
+        <option value="highObstacle" ${chipTypes[index] === "highObstacle" ? "selected" : ""}>High over obstacle</option>
+        <option value="rough" ${chipTypes[index] === "rough" ? "selected" : ""}>Out of rough</option>
+        <option value="bank" ${chipTypes[index] === "bank" ? "selected" : ""}>Into a bank</option>
+        <option value="putter" ${chipTypes[index] === "putter" ? "selected" : ""}>Putter</option>
+      </select>
+    </div>
+  `).join("");
+  el.chipTypeFields.querySelectorAll("[data-chip-index]").forEach((select) => {
+    select.addEventListener("change", () => handleChipTypeChange(Number(select.dataset.chipIndex), select.value));
+  });
+}
+
+function handleBunkerChoice(choice) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (choice === "other") {
+    if (hole.bunkerEntryMode === "other") {
+      hole.bunkerEntryMode = null;
+      hole.greensideBunker = null;
+    } else {
+      hole.bunkerEntryMode = "other";
+      hole.greensideBunker = numberOrNull(el.otherBunkerSelect.value);
+    }
+  } else if (hole.bunkerEntryMode === "preset" && hole.greensideBunker === Number(choice)) {
+    hole.bunkerEntryMode = null;
+    hole.greensideBunker = null;
+  } else {
+    hole.bunkerEntryMode = "preset";
+    hole.greensideBunker = Number(choice);
+  }
+  renderBunkerUi(hole.greensideBunker, hole.bunkerEntryMode);
+  persistActiveRound();
+}
+
+function handleOtherBunkerChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.bunkerEntryMode = "other";
+  hole.greensideBunker = numberOrNull(el.otherBunkerSelect.value);
+  renderBunkerUi(hole.greensideBunker, hole.bunkerEntryMode);
+  persistActiveRound();
+}
+
+function renderBunkerUi(value, entryMode = null) {
+  el.bunkerChoiceButtons.forEach((button) => {
+    const active = button.dataset.bunkerChoice === "other" ? entryMode === "other" : String(value) === button.dataset.bunkerChoice;
+    button.classList.toggle("is-active", active);
+  });
+  el.otherBunkerWrap.classList.toggle("hidden", entryMode !== "other");
+  el.otherBunkerSelect.value = entryMode === "other" && value !== null ? String(value) : "";
+}
+
+function handleGirChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (radioValue("gir") === true && hole.putts === null && numberOrNull(el.scoreInput.value) === hole.par) {
+    hole.puttsEntryMode = "preset";
+    hole.putts = 2;
+    renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
+    persistActiveRound();
+    return;
+  }
+  if (radioValue("gir") === false && numberOrNull(el.scoreInput.value) === hole.par) {
+    if (hole.chips === null) {
+      hole.chipsEntryMode = "preset";
+      hole.chips = 1;
+      hole.chipTypes = ["regular"];
+      renderChipUi(hole.chips, hole.chipTypes, hole.chipsEntryMode);
+    }
+    if (hole.putts === null) {
+      hole.puttsEntryMode = "preset";
+      hole.putts = 1;
+      renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
+    }
+    persistActiveRound();
+  }
 }
 
 function handlePenaltySelect(type) {
@@ -471,6 +849,39 @@ function updatePenaltyUi(type, strokes) {
   }
   const label = type === "threeOffTee" ? "3 off the tee" : type === "lostBall" ? "Lost Ball" : type === "ob" ? "OB" : "Other";
   el.penaltySummary.textContent = strokes === null ? `${label}` : `${label}: ${strokes}`;
+}
+
+function renderDashboard() {
+  const scoredRounds = rounds.filter(hasRoundScore);
+  const recent7 = countRoundsSince(7);
+  const recent30 = countRoundsSince(30);
+  const activeRoundLabel = activeRound ? `${activeRound.course} · Hole ${currentHoleIndex + 1}` : "None";
+
+  el.dashboardStats.innerHTML = [
+    ["Completed rounds", rounds.length],
+    ["Scoring average", scoredRounds.length ? average(scoredRounds.map(totalScore)).toFixed(1) : "0.0"],
+    ["Played last 7 days", recent7],
+    ["Active round", activeRoundLabel]
+  ]
+    .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  el.dashboardRecent.innerHTML = [
+    ["Last 7 days", `${recent7} rounds`],
+    ["Last 30 days", `${recent30} rounds`],
+    ["Most recent round", mostRecentRoundLabel()],
+    ["Best score", bestScoreLabel()]
+  ]
+    .map(([label, value]) => `<div class="dashboard-mini-card"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  drawChart(
+    "dashboardScoreChart",
+    "line",
+    scoredRounds.map((round) => round.date),
+    scoredRounds.map(totalScore),
+    "Score"
+  );
 }
 
 function renderAnalytics() {
@@ -568,8 +979,8 @@ function drawChart(id, type, labels, data, label) {
       datasets: [{
         label,
         data,
-        borderColor: "#1f3d7a",
-        backgroundColor: type === "bar" ? "#1f3d7a" : "#5f83c3",
+        borderColor: type === "bar" ? "#041d4d" : "#63d11f",
+        backgroundColor: type === "bar" ? "#041d4d" : "#63d11f",
         tension: 0.25
       }]
     },
@@ -585,8 +996,8 @@ function drawScatter(id, data, xLabel, yLabel) {
       datasets: [{
         label: `${yLabel} vs ${xLabel}`,
         data,
-        borderColor: "#1f3d7a",
-        backgroundColor: "#5f83c3",
+        borderColor: "#041d4d",
+        backgroundColor: "#63d11f",
         pointRadius: 5
       }]
     },
@@ -605,7 +1016,7 @@ function chartOptions() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: "#183153" } }
+      legend: { labels: { color: "#041d4d" } }
     },
     scales: {
       x: axisOptions(""),
@@ -616,8 +1027,8 @@ function chartOptions() {
 
 function axisOptions(title) {
   return {
-    title: { display: Boolean(title), text: title, color: "#38598f" },
-    ticks: { color: "#38598f" },
+    title: { display: Boolean(title), text: title, color: "#041d4d" },
+    ticks: { color: "#041d4d" },
     grid: { color: "#dce4f3" }
   };
 }
@@ -641,6 +1052,9 @@ function exportCsv() {
     "approachHit",
     "approachMiss",
     "approachDistance",
+    "chips",
+    "chipTypes",
+    "greensideBunker",
     "penaltyType",
     "penaltyStrokes",
     "putts",
@@ -661,6 +1075,9 @@ function exportCsv() {
       hole.approachHit,
       hole.approachMiss,
       hole.approachDistance,
+      hole.chips,
+      (hole.chipTypes || []).join("|"),
+      hole.greensideBunker,
       hole.penaltyType,
       hole.penaltyStrokes,
       hole.putts,
@@ -685,7 +1102,9 @@ function setView(view) {
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === view));
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("is-active"));
   document.getElementById(`${view}View`).classList.add("is-active");
-  el.screenTitle.textContent = view === "scorecard" ? "Scorecard" : view === "analytics" ? "Analytics" : "Rounds";
+  el.screenTitle.textContent =
+    view === "dashboard" ? "Dashboard" : view === "scorecard" ? "Scorecard" : view === "analytics" ? "Analytics" : "Rounds";
+  if (view === "dashboard") renderDashboard();
   if (view === "analytics") renderAnalytics();
   if (view === "rounds") renderRounds();
 }
@@ -745,6 +1164,12 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function limitNumberOrNull(value, max) {
+  const parsed = numberOrNull(value);
+  if (parsed === null) return null;
+  return Math.min(parsed, max);
+}
+
 function totalScore(round) {
   return round.holes.reduce((sum, hole) => sum + (hole.score || 0), 0);
 }
@@ -779,6 +1204,25 @@ function pct(part, total) {
   return total ? Math.round((part / total) * 100) : 0;
 }
 
+function countRoundsSince(days) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return rounds.filter((round) => new Date(round.date) >= cutoff).length;
+}
+
+function mostRecentRoundLabel() {
+  if (!rounds.length) return "No rounds";
+  const recent = rounds.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  return `${recent.course} · ${recent.date}`;
+}
+
+function bestScoreLabel() {
+  const scoredRounds = rounds.filter(hasRoundScore);
+  if (!scoredRounds.length) return "No score";
+  const best = scoredRounds.slice().sort((a, b) => totalScore(a) - totalScore(b))[0];
+  return `${totalScore(best)} · ${best.course}`;
+}
+
 function average(values) {
   const clean = values.filter((value) => Number.isFinite(value));
   return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
@@ -795,7 +1239,8 @@ function csvCell(value) {
 }
 
 function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
+  const isLocalhost = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+  if ("serviceWorker" in navigator && !isLocalhost) {
     navigator.serviceWorker.register("./sw.js");
   }
 }
@@ -810,13 +1255,21 @@ function normalizeRound(round) {
 function normalizeHole(hole) {
   return {
     ...hole,
+    strokeIndex: hole.strokeIndex ?? null,
+    length: hole.length ?? null,
     pickedUp: Boolean(hole.pickedUp),
     fairway: hole.fairway ?? hole.fir ?? null,
     fairwayMiss: hole.fairwayMiss ?? null,
     approachHit: hole.approachHit ?? null,
     approachMiss: hole.approachMiss ?? null,
+    chips: hole.chips ?? null,
+    chipsEntryMode: hole.chipsEntryMode ?? (hole.chips !== null && ![1, 2, 3].includes(hole.chips) ? "other" : hole.chips !== null ? "preset" : null),
+    chipTypes: hole.chipTypes ?? [],
+    greensideBunker: hole.greensideBunker ?? null,
+    bunkerEntryMode: hole.bunkerEntryMode ?? (hole.greensideBunker !== null && ![1, 2, 3].includes(hole.greensideBunker) ? "other" : hole.greensideBunker !== null ? "preset" : null),
     penaltyType: hole.penaltyType ?? null,
     penaltyStrokes: hole.penaltyStrokes ?? null,
+    puttsEntryMode: hole.puttsEntryMode ?? (hole.putts !== null && ![1, 2, 3].includes(hole.putts) ? "other" : hole.putts !== null ? "preset" : null),
     putts: hole.putts ?? null,
     puttDistances: hole.puttDistances ?? []
   };

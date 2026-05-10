@@ -3,32 +3,61 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#041d4d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ForeBall">
     <title>ForeBall Golf Tracker</title>
+    <link rel="icon" type="image/png" href="logo-icon.png">
+    <link rel="apple-touch-icon" href="logo-icon.png">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">ForeBall</p>
-          <h1 id="screenTitle">Scorecard</h1>
-        </div>
+        <button class="brand-link" type="button" id="brandHomeBtn">
+          <img class="brand-wordmark" src="logo-wordmark.png" alt="ForeBall">
+          <span class="screen-label" id="screenTitle">Dashboard</span>
+        </button>
         <div class="running-score" id="runningScore">E</div>
       </header>
 
       <nav class="tabs" aria-label="Primary">
-        <button class="tab is-active" type="button" data-view="scorecard">Scorecard</button>
+        <button class="tab is-active" type="button" data-view="dashboard">Dashboard</button>
+        <button class="tab" type="button" data-view="scorecard">Scorecard</button>
         <button class="tab" type="button" data-view="analytics">Analytics</button>
         <button class="tab" type="button" data-view="rounds">Rounds</button>
       </nav>
 
       <main>
-        <section id="scorecardView" class="view is-active">
+        <section id="dashboardView" class="view is-active">
+          <div class="panel dashboard-hero">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2>Golf at a glance</h2>
+            </div>
+            <div class="dashboard-shortcuts">
+              <button class="primary-action dashboard-link" type="button" data-dashboard-view="scorecard">Go to scorecard</button>
+              <button class="secondary-action dashboard-link" type="button" data-dashboard-view="analytics">Open analytics</button>
+              <button class="secondary-action dashboard-link" type="button" data-dashboard-view="rounds">View rounds</button>
+            </div>
+          </div>
+
+          <div class="stats-grid dashboard-stats" id="dashboardStats"></div>
+
+          <div class="chart-panel">
+            <h2>Overall Score Trend</h2>
+            <div class="chart-wrap"><canvas id="dashboardScoreChart"></canvas></div>
+          </div>
+
+          <div class="panel">
+            <h2>Recent Play</h2>
+            <div class="dashboard-recent-grid" id="dashboardRecent"></div>
+          </div>
+        </section>
+
+        <section id="scorecardView" class="view">
           <div id="startPanel" class="panel">
             <h2>Start Round</h2>
             <label for="courseSelect">Course</label>
@@ -39,47 +68,65 @@
 
           <form id="holeForm" class="panel hidden" autocomplete="off">
             <div class="hole-header">
-              <div>
+              <button class="hole-nav-button hole-header-prev" type="button" id="topPrevHoleBtn">Prev</button>
+              <div class="hole-header-title">
                 <p class="eyebrow" id="courseName"></p>
                 <h2 id="holeTitle">Hole 1</h2>
               </div>
-              <div class="hole-par" id="holePar">Par 4</div>
+              <div class="menu-anchor hole-header-menu">
+                <button class="hole-menu-button" type="button" id="roundMenuBtn" aria-label="Round menu" aria-expanded="false" onclick="window.__debugClick && window.__debugClick('menu'); window.__menuClick && window.__menuClick(event)">...</button>
+                <div class="hole-menu hidden" id="roundMenu">
+                  <button class="hole-menu-item" type="button" id="menuPickedUpBtn">Picked Up</button>
+                  <button class="hole-menu-item" type="button" id="menuRestartRoundBtn">Restart Round</button>
+                  <button class="hole-menu-item hole-menu-item-danger" type="button" id="menuCancelRoundBtn">Cancel Round</button>
+                </div>
+              </div>
+              <div class="hole-header-spacer"></div>
+              <div class="hole-header-meta">
+                <div class="hole-meta">
+                  <span id="holeLength">Length: -- yds</span>
+                  <span id="holeStrokeIndex">S.I.: --</span>
+                </div>
+                <div class="hole-header-actions">
+                  <button class="hole-par hole-par-button" type="button" id="holePar">Par 4</button>
+                </div>
+              </div>
+              <button class="hole-nav-button hole-header-next" type="button" id="topNextHoleBtn" onclick="window.__debugClick && window.__debugClick('top-next'); window.__nextClick && window.__nextClick(event)">Next</button>
             </div>
 
             <div class="score-stepper">
               <button type="button" class="round-button" data-step="-1" aria-label="Decrease score">-</button>
-              <div>
-                <label for="scoreInput">Score</label>
+              <div class="score-display">
+                <label class="sr-only" for="scoreInput">Score</label>
                 <input id="scoreInput" name="score" type="number" inputmode="numeric" min="1">
               </div>
               <button type="button" class="round-button" data-step="1" aria-label="Increase score">+</button>
             </div>
 
-            <fieldset>
-              <legend>Picked up</legend>
-              <div class="binary-row">
-                <label class="toggle-chip"><input type="checkbox" id="pickedUpInput">Picked up</label>
-              </div>
-              <p class="detail-value hidden" id="pickedUpValue">This hole is excluded from averages unless you enter data.</p>
-            </fieldset>
+            <p class="detail-value hidden" id="pickedUpValue">This hole is excluded from averages unless you enter data.</p>
 
             <div class="toggle-grid">
               <fieldset id="fairwayField">
                 <legend>Fairway</legend>
-                <div class="shot-wheel">
-                  <button class="shot-option pos-top" type="button" data-field="fairway" data-value="long">Miss Long</button>
-                  <button class="shot-option pos-left" type="button" data-field="fairway" data-value="left">Miss Left</button>
-                  <button class="shot-option pos-right" type="button" data-field="fairway" data-value="right">Miss Right</button>
-                  <button class="shot-option pos-bottom" type="button" data-field="fairway" data-value="short">Miss Short</button>
-                  <button class="shot-option shot-center" type="button" data-field="fairway" data-value="hit">Hit</button>
-                </div>
-                <div class="field-meta">
-                  <p class="selection-summary" id="fairwaySummary">Not set</p>
-                  <button class="link-clear shot-clear" type="button" data-field="fairway">Clear</button>
+                <div class="shot-wheel-row">
+                  <div class="shot-wheel">
+                    <button class="shot-option pos-top" type="button" data-field="fairway" data-value="long">Miss Long</button>
+                    <button class="shot-option pos-left" type="button" data-field="fairway" data-value="left"><span>Miss</span><span>left</span></button>
+                    <button class="shot-option pos-right" type="button" data-field="fairway" data-value="right"><span>Miss</span><span>right</span></button>
+                    <button class="shot-option pos-bottom" type="button" data-field="fairway" data-value="short">Miss Short</button>
+                    <button class="shot-option shot-center" type="button" data-field="fairway" data-value="hit">Hit</button>
+                  </div>
+                  <button class="shot-clear-icon shot-clear" type="button" aria-label="Clear fairway" data-field="fairway">X</button>
                 </div>
                 <div class="followup-row hidden" id="fairwayFollowup"></div>
               </fieldset>
+            </div>
 
+            <div class="approach-gir-row">
+              <div>
+                <label for="approachDistanceInput">Approach (yards)</label>
+                <input id="approachDistanceInput" name="approachDistance" type="number" inputmode="numeric" min="1" max="999">
+              </div>
               <fieldset>
                 <legend>GIR</legend>
                 <div class="segmented">
@@ -89,23 +136,17 @@
               </fieldset>
             </div>
 
-            <div>
-              <label for="approachDistanceInput">Approach yards</label>
-              <input id="approachDistanceInput" name="approachDistance" type="number" inputmode="numeric" min="1">
-            </div>
-
             <fieldset>
               <legend>Approach</legend>
-              <div class="shot-wheel">
-                <button class="shot-option pos-top" type="button" data-field="approach" data-value="long">Miss Long</button>
-                <button class="shot-option pos-left" type="button" data-field="approach" data-value="left">Miss Left</button>
-                <button class="shot-option pos-right" type="button" data-field="approach" data-value="right">Miss Right</button>
-                <button class="shot-option pos-bottom" type="button" data-field="approach" data-value="short">Miss Short</button>
-                <button class="shot-option shot-center" type="button" data-field="approach" data-value="hit">Hit</button>
-              </div>
-              <div class="field-meta">
-                <p class="selection-summary" id="approachSummary">Not set</p>
-                <button class="link-clear shot-clear" type="button" data-field="approach">Clear</button>
+              <div class="shot-wheel-row">
+                <div class="shot-wheel">
+                  <button class="shot-option pos-top" type="button" data-field="approach" data-value="long">Miss Long</button>
+                  <button class="shot-option pos-left" type="button" data-field="approach" data-value="left"><span>Miss</span><span>left</span></button>
+                  <button class="shot-option pos-right" type="button" data-field="approach" data-value="right"><span>Miss</span><span>right</span></button>
+                  <button class="shot-option pos-bottom" type="button" data-field="approach" data-value="short">Miss Short</button>
+                  <button class="shot-option shot-center" type="button" data-field="approach" data-value="hit">Hit</button>
+                </div>
+                <button class="shot-clear-icon shot-clear" type="button" aria-label="Clear approach" data-field="approach">X</button>
               </div>
               <div class="followup-row hidden" id="approachFollowup"></div>
             </fieldset>
@@ -123,9 +164,6 @@
                 <select id="otherPuttsSelect">
                   <option value="">Select</option>
                   <option value="0">0</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
                   <option value="4">4</option>
                   <option value="5">5</option>
                   <option value="6">6</option>
@@ -133,6 +171,49 @@
               </div>
             </fieldset>
             <div id="puttDistanceFields" class="putt-distance-grid"></div>
+
+            <fieldset>
+              <legend>Chips</legend>
+              <div class="putt-choice-row">
+                <button class="chip-choice" type="button" data-chip-choice="1">1</button>
+                <button class="chip-choice" type="button" data-chip-choice="2">2</button>
+                <button class="chip-choice" type="button" data-chip-choice="3">3</button>
+                <button class="chip-choice" type="button" data-chip-choice="other">Other</button>
+              </div>
+              <div class="hidden" id="otherChipsWrap">
+                <label for="otherChipsSelect">Chips</label>
+                <select id="otherChipsSelect">
+                  <option value="">Select</option>
+                  <option value="0">0</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                </select>
+              </div>
+            </fieldset>
+            <div class="hidden chip-type-grid" id="chipTypeFields"></div>
+
+            <fieldset>
+              <legend>Greenside bunker</legend>
+              <div class="putt-choice-row">
+                <button class="bunker-choice" type="button" data-bunker-choice="1">1</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="2">2</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="3">3</button>
+                <button class="bunker-choice" type="button" data-bunker-choice="other">Other</button>
+              </div>
+              <div class="hidden" id="otherBunkerWrap">
+                <label for="otherBunkerSelect">Greenside bunker</label>
+                <select id="otherBunkerSelect">
+                  <option value="">Select</option>
+                  <option value="0">0</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                </select>
+              </div>
+            </fieldset>
 
             <fieldset>
               <legend>Penalty</legend>
@@ -156,20 +237,21 @@
               <p class="detail-value hidden" id="penaltySummary"></p>
             </fieldset>
 
-            <div class="action-row">
-              <button class="secondary-action" type="button" id="prevHoleBtn">Previous</button>
-              <button class="primary-action" type="submit" id="nextHoleBtn">Next hole</button>
+            <div class="action-row action-row-nav">
+              <button class="hole-nav-button" type="button" id="prevHoleBtn">Prev</button>
+              <div></div>
+              <button class="hole-nav-button" type="button" id="nextHoleBtn" onclick="window.__debugClick && window.__debugClick('bottom-next'); window.__nextClick && window.__nextClick(event)">Next</button>
             </div>
           </form>
         </section>
 
         <section id="analyticsView" class="view">
           <div class="stats-grid" id="statsGrid"></div>
-          <div class="chart-panel"><h2>Score Over Time</h2><canvas id="scoreTrendChart"></canvas></div>
-          <div class="chart-panel"><h2>Approach Accuracy</h2><canvas id="approachChart"></canvas></div>
-          <div class="chart-panel"><h2>Putt Distance</h2><canvas id="puttChart"></canvas></div>
-          <div class="chart-panel"><h2>Score vs GIR</h2><canvas id="girCorrelationChart"></canvas></div>
-          <div class="chart-panel"><h2>Score vs 3-Putts</h2><canvas id="threePuttCorrelationChart"></canvas></div>
+          <div class="chart-panel"><h2>Score Over Time</h2><div class="chart-wrap"><canvas id="scoreTrendChart"></canvas></div></div>
+          <div class="chart-panel"><h2>Approach Accuracy</h2><div class="chart-wrap"><canvas id="approachChart"></canvas></div></div>
+          <div class="chart-panel"><h2>Putt Distance</h2><div class="chart-wrap"><canvas id="puttChart"></canvas></div></div>
+          <div class="chart-panel"><h2>Score vs GIR</h2><div class="chart-wrap"><canvas id="girCorrelationChart"></canvas></div></div>
+          <div class="chart-panel"><h2>Score vs 3-Putts</h2><div class="chart-wrap"><canvas id="threePuttCorrelationChart"></canvas></div></div>
         </section>
 
         <section id="roundsView" class="view">
@@ -182,6 +264,17 @@
           <div id="roundList" class="round-list"></div>
         </section>
       </main>
+    </div>
+
+    <div class="modal-backdrop hidden" id="confirmModal">
+      <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+        <h2 id="confirmModalTitle">Confirm action</h2>
+        <p id="confirmModalMessage">Are you sure?</p>
+        <div class="confirm-modal-actions">
+          <button class="secondary-action" type="button" id="confirmModalCancelBtn">Cancel</button>
+          <button class="danger-action" type="button" id="confirmModalConfirmBtn">Delete round</button>
+        </div>
+      </div>
     </div>
 
     <script src="chart.local.js"></script>

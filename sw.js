@@ -1,4 +1,4 @@
-const CACHE_NAME = "foreball-v1";
+const CACHE_NAME = "foreball-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,8 @@ const APP_SHELL = [
   "./app.js",
   "./chart.local.js",
   "./manifest.json",
-  "./icon.svg"
+  "./logo-icon.png",
+  "./logo-wordmark.png"
 ];
 
 self.addEventListener("install", (event) => {
