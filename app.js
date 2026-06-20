@@ -13,6 +13,12 @@ const COURSES = [
     lengths: [312, 414, 444, 168, 359, 139, 344, 487, 502, 153, 523, 363, 362, 359, 178, 360, 405, 268]
   },
   {
+    name: "North Berwick Children's Course",
+    pars: [3, 3, 3, 3, 3, 3, 3, 3, 3],
+    strokeIndexes: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    lengths: [null, null, null, null, null, null, null, null, null]
+  },
+  {
     name: "Gullane 1",
     pars: [4, 4, 5, 3, 4, 4, 4, 4, 3, 4, 4, 5, 3, 4, 5, 3, 4, 4],
     strokeIndexes: [14, 4, 8, 18, 1, 16, 10, 6, 12, 2, 7, 11, 15, 3, 9, 13, 5, 17],
@@ -49,6 +55,21 @@ const COURSES = [
     lengths: [383, 387, 347, 150, 349, 514, 156, 422, 546, 547, 342, 347, 497, 186, 118, 372, 352, 407]
   }
 ];
+
+const ROUND_FORMATS = {
+  "18": { label: "18 holes", start: 0, end: 18 },
+  course9: { label: "9 holes", start: 0, end: 9 },
+  front9: { label: "Front 9", start: 0, end: 9 },
+  back9: { label: "Back 9", start: 9, end: 18 }
+};
+
+const EMPTY_ROUND_CONTEXT = {
+  weather: "",
+  windSpeed: null,
+  windDirection: "",
+  food: [],
+  notes: ""
+};
 
 const APPROACH_BUCKETS = [
   { label: "40-60", min: 40, max: 60 },
@@ -101,6 +122,7 @@ let selectedRoundId = null;
 let editingCompletedRoundId = null;
 let analyticsRange = "last20";
 let analyticsTab = "overview";
+let selectedRoundFormat = "18";
 
 window.__menuClick = function menuClick(event) {
   toggleRoundMenu(event);
@@ -176,7 +198,18 @@ const el = {
   startPanel: document.getElementById("startPanel"),
   startRoundBtn: document.getElementById("startRoundBtn"),
   resumeRoundBtn: document.getElementById("resumeRoundBtn"),
+  roundFormatButtons: Array.from(document.querySelectorAll("[data-round-format]")),
   holeForm: document.getElementById("holeForm"),
+  roundContextForm: document.getElementById("roundContextForm"),
+  roundContextCourse: document.getElementById("roundContextCourse"),
+  weatherSelect: document.getElementById("weatherSelect"),
+  windSpeedInput: document.getElementById("windSpeedInput"),
+  windDirectionSelect: document.getElementById("windDirectionSelect"),
+  foodEntries: document.getElementById("foodEntries"),
+  addFoodBtn: document.getElementById("addFoodBtn"),
+  roundNotesInput: document.getElementById("roundNotesInput"),
+  roundContextBackBtn: document.getElementById("roundContextBackBtn"),
+  finishRoundBtn: document.getElementById("finishRoundBtn"),
   courseName: document.getElementById("courseName"),
   holeTitle: document.getElementById("holeTitle"),
   holeLength: document.getElementById("holeLength"),
@@ -189,6 +222,7 @@ const el = {
   menuFinishRoundBtn: document.getElementById("menuFinishRoundBtn"),
   menuRestartRoundBtn: document.getElementById("menuRestartRoundBtn"),
   menuCancelRoundBtn: document.getElementById("menuCancelRoundBtn"),
+  topNextHoleBtn: document.getElementById("topNextHoleBtn"),
   scoreInput: document.getElementById("scoreInput"),
   scoreAsterisk: document.getElementById("scoreAsterisk"),
   pickedUpValue: document.getElementById("pickedUpValue"),
@@ -288,6 +322,7 @@ function bindEvents() {
     analyticsRange = el.analyticsRangeSelect.value;
     renderAnalytics();
   });
+  el.courseSelect.addEventListener("change", updateRoundFormatOptions);
 
   document.querySelectorAll("[data-step]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -303,13 +338,22 @@ function bindEvents() {
   });
 
   document.querySelectorAll(".shot-option").forEach((button) => {
-    button.addEventListener("click", () => applyShotSelection(button.dataset.field, button.dataset.value));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      applyShotSelection(button.dataset.field, button.dataset.value);
+    });
+  });
+  document.querySelectorAll(".shot-wheel").forEach((wheel) => {
+    wheel.addEventListener("click", handleShotWheelClick);
   });
   document.querySelectorAll(".shot-clear").forEach((button) => {
     button.addEventListener("click", () => clearShotSelection(button.dataset.field));
   });
   bindToggleableGir();
 
+  el.roundFormatButtons.forEach((button) => {
+    button.addEventListener("click", () => setRoundFormat(button.dataset.roundFormat));
+  });
   el.startRoundBtn.addEventListener("click", startRound);
   el.resumeRoundBtn.addEventListener("click", showHole);
   el.holePar.addEventListener("click", () => {
@@ -322,6 +366,16 @@ function bindEvents() {
   el.topPrevHoleBtn.onclick = goPrevHole;
   el.topNextHoleBtn.onclick = goNextHole;
   el.nextHoleBtn.onclick = goNextHole;
+  el.addFoodBtn.addEventListener("click", () => addFoodEntry());
+  el.roundContextBackBtn.addEventListener("click", returnToLastHole);
+  [el.weatherSelect, el.windSpeedInput, el.windDirectionSelect, el.roundNotesInput].forEach((input) => {
+    input.addEventListener("input", saveRoundContext);
+    input.addEventListener("change", saveRoundContext);
+  });
+  el.roundContextForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    completeRound();
+  });
   el.roundMenuBtn.addEventListener("click", toggleRoundMenu);
   el.menuPickedUpBtn.addEventListener("click", togglePickedUpFromMenu);
   el.menuFinishRoundBtn.addEventListener("click", finishRoundFromMenu);
@@ -369,12 +423,38 @@ function bindEvents() {
 
 function populateCourses() {
   el.courseSelect.innerHTML = COURSES.map((course) => `<option value="${course.name}">${course.name}</option>`).join("");
+  updateRoundFormatOptions();
+}
+
+function selectedCourse() {
+  return COURSES.find((item) => item.name === el.courseSelect.value);
+}
+
+function updateRoundFormatOptions() {
+  const course = selectedCourse();
+  if (!course) return;
+  const isNineHoleCourse = course.pars.length === 9;
+  el.roundFormatButtons.forEach((button) => {
+    const isFullRoundButton = button.dataset.roundFormat === "18";
+    button.classList.toggle("hidden", isNineHoleCourse && !isFullRoundButton);
+    if (isFullRoundButton) button.textContent = isNineHoleCourse ? "9 holes" : "18 holes";
+  });
+  if (isNineHoleCourse) setRoundFormat("18");
+}
+
+function setRoundFormat(formatId) {
+  if (!ROUND_FORMATS[formatId]) return;
+  selectedRoundFormat = formatId;
+  el.roundFormatButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.roundFormat === selectedRoundFormat);
+  });
 }
 
 function startRound() {
-  const course = COURSES.find((item) => item.name === el.courseSelect.value);
+  const course = selectedCourse();
+  if (!course) return;
   editingCompletedRoundId = null;
-  activeRound = createRoundState(course);
+  activeRound = createRoundState(course, selectedRoundFormat);
   currentHoleIndex = 0;
   persistActiveRound();
   showHole();
@@ -394,7 +474,7 @@ function goNextHole(event) {
   if (event) event.preventDefault();
   if (!activeRound) return;
   saveCurrentHole();
-  if (currentHoleIndex === 17) completeRound();
+  if (currentHoleIndex === activeRound.holes.length - 1) showRoundContextPage();
   else {
     currentHoleIndex += 1;
     activeRound.currentHoleIndex = currentHoleIndex;
@@ -404,37 +484,46 @@ function goNextHole(event) {
   }
 }
 
-function createRoundState(course) {
+function createRoundState(course, formatId = "18") {
+  const isNineHoleCourse = course.pars.length === 9;
+  const format = isNineHoleCourse ? { label: "9 holes", start: 0, end: 9 } : getRoundFormat(formatId);
+  const storedFormatId = isNineHoleCourse ? "course9" : formatId;
   return {
     id: `round_${Date.now()}`,
     date: new Date().toISOString().slice(0, 10),
     course: course.name,
+    formatId: storedFormatId,
+    formatLabel: format.label,
+    context: { ...EMPTY_ROUND_CONTEXT },
     currentHoleIndex: 0,
-    holes: course.pars.map((par, index) => ({
-      hole: index + 1,
-      par,
-      strokeIndex: course.strokeIndexes?.[index] ?? null,
-      length: course.lengths?.[index] ?? null,
-      score: null,
-      pickedUp: false,
-      pickedUpManual: false,
-      fairway: par === 3 ? null : null,
-      fairwayMiss: null,
-      gir: null,
-      approachDistance: null,
-      approachHit: null,
-      approachMiss: null,
-      chips: null,
-      chipsEntryMode: null,
-      chipTypes: [],
-      greensideBunker: null,
-      bunkerEntryMode: null,
-      penaltyType: null,
-      penaltyStrokes: null,
-      puttsEntryMode: null,
-      putts: null,
-      puttDistances: []
-    }))
+    holes: course.pars.slice(format.start, format.end).map((par, index) => {
+      const courseHoleIndex = format.start + index;
+      return {
+        hole: courseHoleIndex + 1,
+        par,
+        strokeIndex: course.strokeIndexes?.[courseHoleIndex] ?? null,
+        length: course.lengths?.[courseHoleIndex] ?? null,
+        score: null,
+        pickedUp: false,
+        pickedUpManual: false,
+        fairway: par === 3 ? null : null,
+        fairwayMiss: null,
+        gir: null,
+        approachDistance: null,
+        approachHit: null,
+        approachMiss: null,
+        chips: null,
+        chipsEntryMode: null,
+        chipTypes: [],
+        greensideBunker: null,
+        bunkerEntryMode: null,
+        penaltyType: null,
+        penaltyStrokes: null,
+        puttsEntryMode: null,
+        putts: null,
+        puttDistances: []
+      };
+    })
   };
 }
 
@@ -442,8 +531,9 @@ function showHole() {
   if (!activeRound) return;
   const hole = currentHole();
   el.startPanel.classList.add("hidden");
+  el.roundContextForm.classList.add("hidden");
   el.holeForm.classList.remove("hidden");
-  el.courseName.textContent = activeRound.course;
+  el.courseName.textContent = roundDisplayName(activeRound);
   el.holeTitle.textContent = `Hole ${hole.hole}`;
   el.holeLength.textContent = hole.length ? `Length: ${hole.length} yds` : "Length: -- yds";
   el.holeStrokeIndex.textContent = hole.strokeIndex ? `S.I.: ${hole.strokeIndex}` : "S.I.: --";
@@ -463,9 +553,102 @@ function showHole() {
   updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
   el.prevHoleBtn.disabled = currentHoleIndex === 0;
   el.topPrevHoleBtn.disabled = currentHoleIndex === 0;
-  el.nextHoleBtn.textContent = currentHoleIndex === 17 ? "Finish" : "Next";
+  el.prevHoleBtn.classList.toggle("hidden", currentHoleIndex === 0);
+  el.topPrevHoleBtn.classList.toggle("hidden", currentHoleIndex === 0);
+  const nextLabel = currentHoleIndex === activeRound.holes.length - 1 ? "Finish" : "Next";
+  el.topNextHoleBtn.textContent = nextLabel;
+  el.nextHoleBtn.textContent = nextLabel;
   closeRoundMenu();
   updateRunningScore();
+}
+
+function showRoundContextPage() {
+  if (!activeRound) return;
+  activeRound.context = normalizeRoundContext(activeRound.context);
+  el.holeForm.classList.add("hidden");
+  el.startPanel.classList.add("hidden");
+  el.roundContextForm.classList.remove("hidden");
+  el.roundContextCourse.textContent = roundDisplayName(activeRound);
+  el.weatherSelect.value = activeRound.context.weather || "";
+  el.windSpeedInput.value = activeRound.context.windSpeed ?? "";
+  el.windDirectionSelect.value = activeRound.context.windDirection || "";
+  el.roundNotesInput.value = activeRound.context.notes || "";
+  renderFoodEntries(activeRound.context.food.length ? activeRound.context.food : [{ name: "", holes: [] }]);
+  persistActiveRound();
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+function returnToLastHole() {
+  if (!activeRound) return;
+  saveRoundContext();
+  currentHoleIndex = activeRound.holes.length - 1;
+  activeRound.currentHoleIndex = currentHoleIndex;
+  persistActiveRound();
+  showHole();
+}
+
+function renderFoodEntries(entries) {
+  el.foodEntries.innerHTML = entries
+    .map((entry, index) => `
+      <div class="food-entry" data-food-entry>
+        <div>
+          <label for="foodName${index}">Food</label>
+          <input id="foodName${index}" data-food-name type="text" value="${escapeAttr(entry.name || "")}" placeholder="Banana, bar, sandwich">
+        </div>
+        <div>
+          <label for="foodHoles${index}">Holes</label>
+          <input id="foodHoles${index}" data-food-holes type="text" value="${escapeAttr(formatHoleList(entry.holes))}" placeholder="3, 7, 12">
+        </div>
+        <button class="shot-clear-icon food-remove" type="button" data-remove-food aria-label="Remove food">X</button>
+      </div>
+    `)
+    .join("");
+  el.foodEntries.querySelectorAll("[data-remove-food]").forEach((button) => {
+    button.addEventListener("click", () => {
+      button.closest("[data-food-entry]").remove();
+      if (!el.foodEntries.querySelector("[data-food-entry]")) addFoodEntry();
+      saveRoundContext();
+    });
+  });
+  el.foodEntries.querySelectorAll("input").forEach((input) => input.addEventListener("input", saveRoundContext));
+}
+
+function addFoodEntry(entry = { name: "", holes: [] }) {
+  const entries = readFoodEntries();
+  entries.push(entry);
+  renderFoodEntries(entries);
+}
+
+function saveRoundContext() {
+  if (!activeRound) return;
+  activeRound.context = normalizeRoundContext({
+    weather: el.weatherSelect.value,
+    windSpeed: numberOrNull(el.windSpeedInput.value),
+    windDirection: el.windDirectionSelect.value,
+    food: readFoodEntries(),
+    notes: el.roundNotesInput.value.trim()
+  });
+  persistActiveRound();
+}
+
+function readFoodEntries() {
+  return Array.from(el.foodEntries.querySelectorAll("[data-food-entry]"))
+    .map((row) => ({
+      name: row.querySelector("[data-food-name]").value.trim(),
+      holes: parseHoleList(row.querySelector("[data-food-holes]").value)
+    }))
+    .filter((entry) => entry.name || entry.holes.length);
+}
+
+function parseHoleList(value) {
+  return String(value || "")
+    .split(/[^0-9]+/)
+    .map((item) => Number(item))
+    .filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18);
+}
+
+function formatHoleList(holes) {
+  return Array.isArray(holes) ? holes.join(", ") : "";
 }
 
 function saveCurrentHole() {
@@ -499,6 +682,7 @@ function saveCurrentHole() {
 
 function completeRound() {
   saveCurrentHole();
+  saveRoundContext();
   finalizeRemainingHoles();
   const completed = { ...activeRound };
   delete completed.currentHoleIndex;
@@ -510,6 +694,7 @@ function completeRound() {
   localStorage.removeItem(STORAGE_KEYS.activeRound);
   currentHoleIndex = 0;
   el.holeForm.classList.add("hidden");
+  el.roundContextForm.classList.add("hidden");
   el.startPanel.classList.remove("hidden");
   updateResumeButton();
   renderDashboard();
@@ -625,6 +810,19 @@ function renderShotUi(field, selected, missValue) {
   });
 }
 
+function handleShotWheelClick(event) {
+  const wheel = event.currentTarget;
+  const field = wheel.dataset.field;
+  if (!field) return;
+  const rect = wheel.getBoundingClientRect();
+  const x = event.clientX - rect.left - rect.width / 2;
+  const y = event.clientY - rect.top - rect.height / 2;
+  const distance = Math.hypot(x, y);
+  const centerRadius = rect.width * 0.22;
+  const value = distance <= centerRadius ? "hit" : Math.abs(y) >= Math.abs(x) ? (y < 0 ? "long" : "short") : x < 0 ? "left" : "right";
+  applyShotSelection(field, value);
+}
+
 function applyFollowup(field, value) {
   if (!activeRound) return;
   const hole = currentHole();
@@ -727,7 +925,8 @@ function togglePickedUpFromMenu() {
 function finishRoundFromMenu() {
   if (!activeRound) return;
   closeRoundMenu();
-  completeRound();
+  saveCurrentHole();
+  showRoundContextPage();
 }
 
 function openConfirmModal(action) {
@@ -754,7 +953,7 @@ function restartActiveRound() {
   if (!activeRound) return;
   const course = COURSES.find((item) => item.name === activeRound.course);
   if (!course) return;
-  activeRound = createRoundState(course);
+  activeRound = createRoundState(course, activeRound.formatId || "18");
   currentHoleIndex = 0;
   persistActiveRound();
   showHole();
@@ -766,6 +965,7 @@ function cancelActiveRound() {
   currentHoleIndex = 0;
   localStorage.removeItem(STORAGE_KEYS.activeRound);
   el.holeForm.classList.add("hidden");
+  el.roundContextForm.classList.add("hidden");
   el.startPanel.classList.remove("hidden");
   updateResumeButton();
   renderDashboard();
@@ -998,11 +1198,11 @@ function renderDashboard() {
   const scoredRounds = rounds.filter(hasRoundScore);
   const recent7 = countRoundsSince(7);
   const recent30 = countRoundsSince(30);
-  const activeRoundLabel = activeRound && !editingCompletedRoundId ? `${activeRound.course} · Hole ${currentHoleIndex + 1}` : "None";
+  const activeRoundLabel = activeRound && !editingCompletedRoundId ? `${roundDisplayName(activeRound)} · Hole ${currentHole().hole}` : "None";
 
   el.dashboardStats.innerHTML = [
     ["Completed rounds", rounds.length],
-    ["Scoring average", scoredRounds.length ? average(scoredRounds.map(totalScore)).toFixed(1) : "0.0"],
+    ["Scoring average", scoredRounds.length ? average(scoredRounds.map(adjustedRoundScore)).toFixed(1) : "0.0"],
     ["Played last 7 days", recent7],
     ["Active round", activeRoundLabel]
   ]
@@ -1022,7 +1222,7 @@ function renderDashboard() {
     "dashboardScoreChart",
     "line",
     scoredRounds.map((round) => round.date),
-    scoredRounds.map(totalScore),
+    scoredRounds.map(adjustedRoundScore),
     "Score"
   );
 }
@@ -1041,6 +1241,7 @@ function renderAnalytics() {
   if (analyticsTab === "ballStriking") renderAnalyticsBallStriking(filteredRounds, roundMetrics);
   if (analyticsTab === "shortGame") renderAnalyticsShortGame(filteredRounds, roundMetrics);
   if (analyticsTab === "putting") renderAnalyticsPutting(filteredRounds, roundMetrics);
+  if (analyticsTab === "conditions") renderAnalyticsConditions(filteredRounds, roundMetrics);
   if (analyticsTab === "trends") renderAnalyticsTrends(filteredRounds, roundMetrics);
   if (analyticsTab === "comparisons") renderAnalyticsComparisons(filteredRounds, roundMetrics);
 }
@@ -1078,6 +1279,7 @@ function getAnalyticsRounds() {
 
 function buildRoundMetrics(round) {
   const holes = round.holes.map(normalizeHole);
+  const context = normalizeRoundContext(round.context);
   const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
   const girHoles = holes.filter((hole) => hole.gir !== null);
   const approachHoles = holes.filter((hole) => hole.approachHit !== null);
@@ -1085,25 +1287,35 @@ function buildRoundMetrics(round) {
   const firstPuttDistances = holes.map((hole) => hole.puttDistances?.[0]).filter((value) => typeof value === "number");
   const chipTypes = holes.flatMap((hole) => hole.chipTypes || []);
   const missedGir = holes.filter((hole) => hole.gir === false);
-  const score = totalScore(round);
+  const scale = roundEighteenHoleScale(round);
+  const score = adjustedRoundScore(round);
+  const actualPuttsTotal = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
+  const actualChipsTotal = holes.reduce((sum, hole) => sum + (hole.chips || 0), 0);
+  const actualBunkerTotal = holes.reduce((sum, hole) => sum + (hole.greensideBunker || 0), 0);
+  const actualPenaltiesTotal = holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0);
   return {
     round,
+    context,
     score,
-    overPar: score - totalPar(round),
+    actualScore: totalScore(round),
+    overPar: score - totalPar(round) * scale,
     girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
     firPct: pct(fairwayHoles.filter((hole) => hole.fairway).length, fairwayHoles.length),
     approachHitPct: pct(approachHoles.filter((hole) => hole.approachHit).length, approachHoles.length),
     girCount: girCount(round),
     firCount: fairwayHoles.filter((hole) => hole.fairway).length,
-    puttsTotal: puttHoles.reduce((sum, hole) => sum + hole.putts, 0),
+    puttsTotal: actualPuttsTotal * scale,
+    actualPuttsTotal,
     avgPutts: average(puttHoles.map((hole) => hole.putts)),
     threePutts: puttHoles.filter((hole) => hole.putts >= 3).length,
-    puttsOver6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "over"), 0),
-    puttsUnder6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "under"), 0),
+    puttsOver6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "over"), 0) * scale,
+    puttsUnder6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "under"), 0) * scale,
     firstPuttDistance: average(firstPuttDistances),
-    chipsTotal: holes.reduce((sum, hole) => sum + (hole.chips || 0), 0),
-    bunkerTotal: holes.reduce((sum, hole) => sum + (hole.greensideBunker || 0), 0),
-    penaltiesTotal: holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0),
+    chipsTotal: actualChipsTotal * scale,
+    bunkerTotal: actualBunkerTotal * scale,
+    penaltiesTotal: actualPenaltiesTotal * scale,
+    windSpeed: context.windSpeed,
+    foodCount: context.food.length,
     avgApproachDistance: average(holes.map((hole) => hole.approachDistance)),
     scramblePct: pct(missedGir.filter((hole) => hole.score !== null && hole.score <= hole.par).length, missedGir.length),
     chipRegular: chipTypes.filter((type) => type === "regular").length,
@@ -1235,7 +1447,7 @@ function renderAnalyticsPutting(filteredRounds, roundMetrics) {
       <div class="stats-grid">
         ${renderStatCards([
           ["Avg Putts", average(roundMetrics.map((item) => item.puttsTotal)).toFixed(1)],
-          ["Total Putts", sum(roundMetrics.map((item) => item.puttsTotal))],
+          ["Total Putts", sum(roundMetrics.map((item) => item.actualPuttsTotal))],
           ["1-Putt %", `${pct(onePutts, puttHoles.length)}%`],
           ["2-Putt %", `${pct(twoPutts, puttHoles.length)}%`],
           ["3-Putt %", `${pct(threePutts, puttHoles.length)}%`],
@@ -1251,6 +1463,26 @@ function renderAnalyticsPutting(filteredRounds, roundMetrics) {
     { label: "Putts > 6ft", data: roundMetrics.map((item) => item.puttsOver6), color: "#63d11f" },
     { label: "Putts <= 6ft", data: roundMetrics.map((item) => item.puttsUnder6), color: "#8aa2d3" }
   ], "Count");
+}
+
+function renderAnalyticsConditions(filteredRounds, roundMetrics) {
+  const windRows = roundMetrics.filter((item) => Number.isFinite(item.windSpeed));
+  const windCoeff = correl(windRows.map((item) => item.windSpeed), windRows.map((item) => item.score));
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Rounds with weather", filteredRounds.filter((round) => normalizeRoundContext(round.context).weather).length],
+          ["Rounds with wind", windRows.length],
+          ["Avg wind speed", windRows.length ? `${average(windRows.map((item) => item.windSpeed)).toFixed(1)} mph` : "0.0 mph"],
+          ["Wind/score CORREL", Number.isFinite(windCoeff) ? windCoeff.toFixed(2) : "0.00"]
+        ])}
+      </div>
+      <div class="panel"><div class="analytics-section-header"><h2>Weather vs Score</h2><span class="analytics-note">Average adjusted score by weather</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "weather"), "Weather")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average adjusted score by wind direction</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "windDirection"), "Direction")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Food vs Score</h2><span class="analytics-note">Average adjusted score when food was logged</span></div>${renderContextGroupTable(groupRoundsByFood(filteredRounds), "Food")}</div>
+    </div>
+  `;
 }
 
 function renderAnalyticsTrends(filteredRounds, roundMetrics) {
@@ -1317,7 +1549,7 @@ function renderRounds() {
       <article class="round-card">
         <header>
           <div>
-            <h2>${round.course}</h2>
+            <h2>${roundDisplayName(round)}</h2>
             <p>${round.date}</p>
           </div>
           <strong>${formatRelative(totalScore(round), totalPar(round))}</strong>
@@ -1358,7 +1590,7 @@ function openRoundDetail(roundId) {
   el.roundListSection.classList.add("hidden");
   el.roundDetailSection.classList.remove("hidden");
   el.roundStatsSection.classList.add("hidden");
-  el.roundDetailTitle.textContent = round.course;
+  el.roundDetailTitle.textContent = roundDisplayName(round);
   el.roundDetailMeta.textContent = round.date;
   el.roundDetailTotal.textContent = totalScore(round);
   el.roundDetailRelative.textContent = formatRelative(totalScore(round), totalPar(round));
@@ -1402,7 +1634,7 @@ function openRoundStats(roundId) {
   el.roundListSection.classList.add("hidden");
   el.roundDetailSection.classList.add("hidden");
   el.roundStatsSection.classList.remove("hidden");
-  el.roundStatsTitle.textContent = `${round.course} Stats`;
+  el.roundStatsTitle.textContent = `${roundDisplayName(round)} Stats`;
   el.roundStatsMeta.textContent = round.date;
   el.roundStatsGross.textContent = totalScore(round);
   el.roundStatsRelative.textContent = formatRelative(totalScore(round), totalPar(round));
@@ -1575,6 +1807,8 @@ function buildCorrelationRows(roundMetrics) {
     ["Chips", "chipsTotal"],
     ["Bunker shots", "bunkerTotal"],
     ["Penalty strokes", "penaltiesTotal"],
+    ["Wind speed", "windSpeed"],
+    ["Food entries", "foodCount"],
     ["Scrambling %", "scramblePct"],
     ["Regular chips", "chipRegular"],
     ["Bump and run", "chipBumpRun"],
@@ -1772,7 +2006,7 @@ function compareRecentVsPrevious(roundMetrics) {
 }
 
 function buildBestWorstComparison(sourceRounds) {
-  const sorted = sourceRounds.slice().sort((a, b) => totalScore(a) - totalScore(b));
+  const sorted = sourceRounds.slice().sort((a, b) => adjustedRoundScore(a) - adjustedRoundScore(b));
   const bestRounds = sorted.slice(0, Math.min(5, sorted.length));
   const worstRounds = sorted.slice(-Math.min(5, sorted.length));
   return { best: summarizeComparisonGroup(bestRounds), worst: summarizeComparisonGroup(worstRounds) };
@@ -1812,6 +2046,64 @@ function renderComparisonTable(compared) {
       </table>
     </div>
   `;
+}
+
+function groupRoundsByContext(sourceRounds, field) {
+  const groups = new Map();
+  sourceRounds.forEach((round) => {
+    const context = normalizeRoundContext(round.context);
+    const key = context[field];
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(round);
+  });
+  return Array.from(groups.entries())
+    .map(([label, group]) => ({
+      label: formatContextLabel(label),
+      rounds: group.length,
+      avgScore: average(group.map(adjustedRoundScore)).toFixed(1),
+      bestScore: Math.min(...group.map(adjustedRoundScore))
+    }))
+    .sort((a, b) => Number(a.avgScore) - Number(b.avgScore));
+}
+
+function groupRoundsByFood(sourceRounds) {
+  const groups = new Map();
+  sourceRounds.forEach((round) => {
+    normalizeRoundContext(round.context).food.forEach((entry) => {
+      if (!entry.name) return;
+      const key = entry.name.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { label: entry.name, rounds: [] });
+      groups.get(key).rounds.push(round);
+    });
+  });
+  return Array.from(groups.values())
+    .map((group) => ({
+      label: group.label,
+      rounds: group.rounds.length,
+      avgScore: average(group.rounds.map(adjustedRoundScore)).toFixed(1),
+      bestScore: Math.min(...group.rounds.map(adjustedRoundScore))
+    }))
+    .sort((a, b) => Number(a.avgScore) - Number(b.avgScore));
+}
+
+function renderContextGroupTable(rows, label) {
+  if (!rows.length) return `<p class="analytics-note">No logged data yet.</p>`;
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>${label}</th><th>Rounds</th><th>Avg score</th><th>Best</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${row.rounds}</td><td>${row.avgScore}</td><td>${row.bestScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function formatContextLabel(value) {
+  return String(value || "")
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function correl(xs, ys) {
@@ -1879,6 +2171,12 @@ function exportCsv() {
     "roundId",
     "date",
     "course",
+    "round_format",
+    "weather",
+    "wind_speed",
+    "wind_direction",
+    "food",
+    "round_notes",
     "hole",
     "par",
     "score",
@@ -1898,10 +2196,18 @@ function exportCsv() {
     "puttDistances"
   ];
   const rows = rounds.flatMap((round) =>
-    round.holes.map((hole) => [
+    round.holes.map((hole) => {
+      const context = normalizeRoundContext(round.context);
+      return [
       round.id,
       round.date,
       round.course,
+      round.formatLabel,
+      context.weather,
+      context.windSpeed,
+      context.windDirection,
+      context.food.map((entry) => `${entry.name}${entry.holes.length ? ` (${formatHoleList(entry.holes)})` : ""}`).join("|"),
+      context.notes,
       hole.hole,
       hole.par,
       hole.score,
@@ -1919,7 +2225,8 @@ function exportCsv() {
       hole.penaltyStrokes,
       hole.putts,
       (hole.puttDistances || []).join("|")
-    ])
+      ];
+    })
   );
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
   download("foreball-rounds.csv", csv, "text/csv");
@@ -2052,6 +2359,14 @@ function totalScore(round) {
   return round.holes.reduce((sum, hole) => sum + (hole.score || 0), 0);
 }
 
+function roundEighteenHoleScale(round) {
+  return round.holes.length === 9 ? 2 : 1;
+}
+
+function adjustedRoundScore(round) {
+  return totalScore(round) * roundEighteenHoleScale(round);
+}
+
 function totalPar(round) {
   return round.holes.reduce((sum, hole) => sum + (hole.score !== null ? hole.par : 0), 0);
 }
@@ -2131,14 +2446,33 @@ function countRoundsSince(days) {
 function mostRecentRoundLabel() {
   if (!rounds.length) return "No rounds";
   const recent = rounds.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-  return `${recent.course} · ${recent.date}`;
+  return `${roundDisplayName(recent)} · ${recent.date}`;
 }
 
 function bestScoreLabel() {
   const scoredRounds = rounds.filter(hasRoundScore);
   if (!scoredRounds.length) return "No score";
-  const best = scoredRounds.slice().sort((a, b) => totalScore(a) - totalScore(b))[0];
-  return `${totalScore(best)} · ${best.course}`;
+  const best = scoredRounds.slice().sort((a, b) => adjustedRoundScore(a) - adjustedRoundScore(b))[0];
+  return `${adjustedRoundScore(best)} · ${roundDisplayName(best)}`;
+}
+
+function getRoundFormat(formatId) {
+  return ROUND_FORMATS[formatId] || ROUND_FORMATS["18"];
+}
+
+function inferRoundFormat(round) {
+  if (round.formatId && ROUND_FORMATS[round.formatId]) return round.formatId;
+  const holes = round.holes || [];
+  if (holes.length === 9 && round.course === "North Berwick Children's Course") return "course9";
+  if (holes.length === 9 && holes[0]?.hole === 10) return "back9";
+  if (holes.length === 9) return "front9";
+  return "18";
+}
+
+function roundDisplayName(round) {
+  const formatId = inferRoundFormat(round);
+  const format = getRoundFormat(formatId);
+  return formatId === "18" ? round.course : `${round.course} · ${format.label}`;
 }
 
 function calculateRoundStats(round) {
@@ -2181,6 +2515,19 @@ function csvCell(value) {
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
 function registerServiceWorker() {
   const isLocalhost = ["127.0.0.1", "localhost"].includes(window.location.hostname);
   if ("serviceWorker" in navigator && !isLocalhost) {
@@ -2189,9 +2536,34 @@ function registerServiceWorker() {
 }
 
 function normalizeRound(round) {
+  const formatId = inferRoundFormat(round);
   return {
     ...round,
+    formatId,
+    formatLabel: getRoundFormat(formatId).label,
+    context: normalizeRoundContext(round.context),
     holes: (round.holes || []).map(normalizeHole)
+  };
+}
+
+function normalizeRoundContext(context = {}) {
+  return {
+    weather: context.weather || "",
+    windSpeed: context.windSpeed === "" || context.windSpeed === null || context.windSpeed === undefined
+      ? null
+      : Number.isFinite(Number(context.windSpeed)) ? Number(context.windSpeed) : null,
+    windDirection: context.windDirection || "",
+    food: Array.isArray(context.food)
+      ? context.food
+          .map((entry) => ({
+            name: String(entry.name || "").trim(),
+            holes: Array.isArray(entry.holes)
+              ? entry.holes.filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18)
+              : parseHoleList(entry.holes)
+          }))
+          .filter((entry) => entry.name || entry.holes.length)
+      : [],
+    notes: context.notes || ""
   };
 }
 
