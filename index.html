@@ -20,7 +20,9 @@
           <img class="brand-wordmark" src="logo-wordmark.png" alt="ForeBall">
           <span class="screen-label" id="screenTitle">Dashboard</span>
         </button>
-        <div class="running-score" id="runningScore">E</div>
+        <button class="profile-avatar-button" type="button" id="profileBtn" aria-label="Open profile">
+          <span class="profile-avatar-icon" aria-hidden="true"></span>
+        </button>
       </header>
 
       <nav class="tabs" aria-label="Primary">
@@ -51,9 +53,72 @@
             <div class="chart-wrap"><canvas id="dashboardScoreChart"></canvas></div>
           </div>
 
+          <div class="chart-panel">
+            <h2>Handicap Index Trend</h2>
+            <div class="chart-wrap"><canvas id="dashboardHandicapChart"></canvas></div>
+          </div>
+
           <div class="panel">
             <h2>Recent Play</h2>
             <div class="dashboard-recent-grid" id="dashboardRecent"></div>
+          </div>
+        </section>
+
+        <section id="profileView" class="view">
+          <div class="panel profile-header-panel">
+            <div class="profile-header-menu card-menu-anchor">
+              <button class="card-menu-button" type="button" id="profileMenuBtn" aria-label="Profile options">...</button>
+              <div class="card-menu hidden" id="profileMenu">
+                <button class="card-menu-item" type="button" id="editProfileBtn">Update profile</button>
+              </div>
+            </div>
+            <label class="profile-photo-control">
+              <input id="profilePhotoInput" type="file" accept="image/*">
+              <span class="profile-page-avatar" id="profilePhotoPreview">
+                <span class="profile-avatar-icon" aria-hidden="true"></span>
+              </span>
+            </label>
+            <div class="profile-main-fields">
+              <div id="profileNameDisplay" class="profile-name-display hidden"></div>
+              <div id="profileNameEditor">
+                <label for="profileNameInput">Name</label>
+                <input id="profileNameInput" type="text" autocomplete="name" placeholder="Your name">
+              </div>
+              <div id="profileGoalEditor">
+                <div class="profile-goal-grid">
+                  <div>
+                    <label for="currentHandicapInput">Current handicap</label>
+                    <input id="currentHandicapInput" type="number" inputmode="decimal" step="0.1" placeholder="12.4">
+                  </div>
+                  <div>
+                    <label for="handicapGoalInput">Handicap goal</label>
+                    <input id="handicapGoalInput" type="number" inputmode="decimal" step="0.1" placeholder="8.0">
+                  </div>
+                  <div>
+                    <label for="handicapGoalDateInput">Goal date</label>
+                    <input id="handicapGoalDateInput" type="date">
+                  </div>
+                </div>
+                <button class="primary-action" type="button" id="saveProfileGoalBtn">Save profile</button>
+              </div>
+              <p class="profile-handicap-summary" id="profileHandicapSummary">My current handicap is: -- and my goal is --.</p>
+            </div>
+          </div>
+
+          <div id="profileBagPanel" class="panel">
+            <div class="profile-section-header">
+              <div>
+                <h2>My bag</h2>
+                <span class="bag-count" id="bagCount">0/14</span>
+              </div>
+              <div class="card-menu-anchor">
+                <button class="card-menu-button" type="button" id="bagMenuBtn" aria-label="Bag options">...</button>
+                <div class="card-menu hidden" id="bagMenu">
+                  <button class="card-menu-item" type="button" id="editBagBtn">Update bag</button>
+                </div>
+              </div>
+            </div>
+            <div id="clubSelector" class="club-selector"></div>
           </div>
         </section>
 
@@ -114,6 +179,8 @@
 
             <p class="detail-value hidden" id="pickedUpValue">Picked up counts as triple bogey. Other unchecked fields stay out of the stats.</p>
 
+            <div class="scorecard-divider"></div>
+            <h3 class="scorecard-section-title">Putts</h3>
             <fieldset>
               <legend>Putts</legend>
               <div class="putt-choice-row">
@@ -135,6 +202,8 @@
             </fieldset>
             <div id="puttDistanceFields" class="putt-distance-grid"></div>
 
+            <div class="scorecard-divider"></div>
+            <h3 class="scorecard-section-title">Off the tee</h3>
             <div class="toggle-grid">
               <fieldset id="fairwayField">
                 <legend>Fairway</legend>
@@ -150,8 +219,39 @@
                 </div>
                 <div class="followup-row hidden" id="fairwayFollowup"></div>
               </fieldset>
+              <div>
+                <label for="teeClubSelect">Club used</label>
+                <select id="teeClubSelect">
+                  <option value="">Select club</option>
+                </select>
+              </div>
+              <fieldset id="fairwayBunkerField" class="fairway-bunker-field hidden">
+                <button class="secondary-action fairway-bunker-toggle" type="button" id="fairwayBunkerToggleBtn">Fairway bunkers</button>
+                <div class="hidden bunker-expand-panel" id="fairwayBunkerPanel">
+                  <legend>Fairway bunkers</legend>
+                  <div class="putt-choice-row">
+                    <button class="fairway-bunker-choice" type="button" data-fairway-bunker-choice="1">1</button>
+                    <button class="fairway-bunker-choice" type="button" data-fairway-bunker-choice="2">2</button>
+                    <button class="fairway-bunker-choice" type="button" data-fairway-bunker-choice="3">3</button>
+                    <button class="fairway-bunker-choice" type="button" data-fairway-bunker-choice="other">Other</button>
+                  </div>
+                  <div class="hidden" id="otherFairwayBunkerWrap">
+                    <label for="otherFairwayBunkerSelect">Fairway bunkers</label>
+                    <select id="otherFairwayBunkerSelect">
+                      <option value="">Select</option>
+                      <option value="0">0</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
             </div>
 
+            <div class="scorecard-divider"></div>
+            <h3 class="scorecard-section-title">Into the green</h3>
             <fieldset>
               <legend>Approach</legend>
               <div class="shot-wheel-row">
@@ -180,7 +280,15 @@
                 </div>
               </fieldset>
             </div>
+            <div>
+              <label for="approachClubSelect">Club used</label>
+              <select id="approachClubSelect">
+                <option value="">Select club</option>
+              </select>
+            </div>
 
+            <div class="scorecard-divider"></div>
+            <h3 class="scorecard-section-title">Short game</h3>
             <fieldset>
               <legend>Chips</legend>
               <div class="putt-choice-row">
@@ -224,6 +332,8 @@
               </div>
             </fieldset>
 
+            <div class="scorecard-divider"></div>
+            <h3 class="scorecard-section-title">Penalties</h3>
             <fieldset>
               <legend>Penalty</legend>
               <div class="penalty-grid">
@@ -340,6 +450,22 @@
 
         <section id="roundsView" class="view">
           <div id="roundListSection">
+            <div class="panel rounds-export-panel">
+              <h2>Export rounds</h2>
+              <div class="rounds-export-controls">
+                <div>
+                  <label for="roundExportCountSelect">Rounds</label>
+                  <select id="roundExportCountSelect">
+                    <option value="1">Last 1 round</option>
+                    <option value="5">Last 5 rounds</option>
+                    <option value="10">Last 10 rounds</option>
+                    <option value="20">Last 20 rounds</option>
+                    <option value="all">All rounds</option>
+                  </select>
+                </div>
+                <button class="primary-action" type="button" id="exportRoundsBtn">Export rounds</button>
+              </div>
+            </div>
             <div id="roundList" class="round-list"></div>
           </div>
           <div id="roundDetailSection" class="hidden">
@@ -415,7 +541,8 @@
                       <th>Putts &gt; 6ft</th>
                       <th>Putts &lt;= 6ft</th>
                       <th>Chips</th>
-                      <th>Bunker</th>
+                      <th>Fairway bunker</th>
+                      <th>Greenside bunker</th>
                       <th>Penalties</th>
                     </tr>
                   </thead>
@@ -440,6 +567,6 @@
     </div>
 
     <script src="chart.local.js"></script>
-    <script src="app.js?v=20260623-small-fixes"></script>
+    <script src="app.js?v=20260623-handicap"></script>
   </body>
 </html>

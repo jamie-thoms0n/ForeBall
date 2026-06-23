@@ -145,6 +145,49 @@ h2 {
   font-weight: 900;
 }
 
+.profile-avatar-button {
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #edf2f8;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+}
+
+.profile-avatar-icon {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+.profile-avatar-icon::before,
+.profile-avatar-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #70809b;
+}
+
+.profile-avatar-icon::before {
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.profile-avatar-icon::after {
+  bottom: 2px;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px 999px 8px 8px;
+}
+
 .tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -156,6 +199,7 @@ h2 {
 .secondary-action,
 .putt-choice,
 .chip-choice,
+.fairway-bunker-choice,
 .bunker-choice,
 .followup-button,
 .link-clear {
@@ -170,6 +214,7 @@ h2 {
 .tab.is-active,
 .putt-choice.is-active,
 .chip-choice.is-active,
+.fairway-bunker-choice.is-active,
 .bunker-choice.is-active,
 .followup-button.is-active,
 .penalty-button.is-active {
@@ -531,6 +576,19 @@ h2 {
   justify-content: flex-start;
 }
 
+.scorecard-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 18px 0 4px;
+}
+
+.scorecard-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -609,6 +667,203 @@ h2 {
 
 .food-remove {
   align-self: end;
+}
+
+.bunker-expand-panel {
+  margin-top: 10px;
+}
+
+.fairway-bunker-field {
+  width: 100%;
+  justify-self: start;
+}
+
+.fairway-bunker-toggle {
+  width: min(50%, 220px);
+}
+
+.fairway-bunker-toggle.is-active {
+  border-color: var(--accent-2);
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.rounds-export-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.rounds-export-controls .primary-action {
+  min-width: 150px;
+}
+
+.profile-header-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.profile-header-menu {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.profile-photo-control {
+  margin: 0;
+  cursor: pointer;
+}
+
+.profile-photo-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.profile-page-avatar {
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #edf2f8;
+  background-position: center;
+  background-size: cover;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.profile-page-avatar.has-photo .profile-avatar-icon {
+  display: none;
+}
+
+.profile-main-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-name-display {
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.profile-goal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-handicap-summary {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.profile-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bag-count {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.bag-count.is-good {
+  color: var(--accent-2);
+}
+
+.bag-count.is-over {
+  color: var(--danger);
+}
+
+.club-selector,
+.club-group {
+  display: grid;
+  gap: 14px;
+}
+
+.club-group + .club-group {
+  margin-top: 16px;
+}
+
+.club-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.saved-bag-list {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-bag-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.club-chip {
+  position: relative;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 8px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.club-chip:has(input:checked) {
+  border-color: var(--accent-2);
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.club-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wedge-entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 0.45fr) auto;
+  gap: 8px;
+}
+
+.wedge-entry-row .secondary-action {
+  min-width: 112px;
+}
+
+.wedge-chip {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wedge-remove-button {
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  background: #e8edf5;
+  color: var(--muted);
+  padding: 0;
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
 .segmented {
@@ -1013,16 +1268,38 @@ canvas {
 }
 
 .round-card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   padding: 12px;
 }
 
+.round-card.is-counting-handicap {
+  border-color: rgba(99, 209, 31, 0.75);
+}
+
+.counting-handicap-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+  font-weight: 900;
+  box-shadow: 0 2px 8px rgba(4, 29, 77, 0.12);
+}
+
 .round-card header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  padding-right: 26px;
   margin-bottom: 10px;
 }
 
@@ -1236,9 +1513,17 @@ canvas {
   .penalty-grid,
   .conditions-grid,
   .food-entry,
+  .rounds-export-controls,
+  .profile-header-panel,
+  .profile-goal-grid,
+  .wedge-entry-row,
   .followup-row,
   .approach-gir-row {
     grid-template-columns: 1fr;
+  }
+
+  .club-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .hole-header {

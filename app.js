@@ -2,6 +2,7 @@ const STORAGE_KEYS = {
   rounds: "foreball.rounds.v1",
   roundsBackup: "foreball.rounds.backup.v1",
   activeRound: "foreball.activeRound.v1",
+  profile: "foreball.profile.v1",
   meta: "foreball.meta.v1"
 };
 
@@ -63,6 +64,22 @@ const ROUND_FORMATS = {
   back9: { label: "Back 9", start: 9, end: 18 }
 };
 
+const HANDICAP_PCC = 0;
+const DEFAULT_SLOPE_RATING = 113;
+const HANDICAP_ALLOWANCES = [
+  { min: 20, count: 8, adjustment: 0 },
+  { min: 19, count: 7, adjustment: 0 },
+  { min: 17, count: 6, adjustment: 0 },
+  { min: 15, count: 5, adjustment: 0 },
+  { min: 12, count: 4, adjustment: 0 },
+  { min: 9, count: 3, adjustment: 0 },
+  { min: 7, count: 2, adjustment: 0 },
+  { min: 6, count: 2, adjustment: -1 },
+  { min: 5, count: 1, adjustment: 0 },
+  { min: 4, count: 1, adjustment: -1 },
+  { min: 3, count: 1, adjustment: -2 }
+];
+
 const EMPTY_ROUND_CONTEXT = {
   weather: "",
   windSpeed: null,
@@ -70,6 +87,25 @@ const EMPTY_ROUND_CONTEXT = {
   food: [],
   notes: ""
 };
+
+const DEFAULT_PROFILE = {
+  name: "",
+  currentHandicap: null,
+  handicapGoal: null,
+  handicapGoalDate: "",
+  handicapGoals: [],
+  bag: [],
+  wedges: [],
+  photo: ""
+};
+
+const CLUB_GROUPS = [
+  { label: "Driver", clubs: ["Driver"] },
+  { label: "Woods", clubs: ["2 Wood", "3 Wood", "4 Wood", "5 Wood", "7 Wood", "9 Wood"] },
+  { label: "Hybrids", clubs: ["2 Hybrid", "3 Hybrid", "4 Hybrid", "5 Hybrid", "6 Hybrid"] },
+  { label: "Irons", clubs: ["2 Iron", "3 Iron", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron"] },
+  { label: "Putter", clubs: ["Putter"] }
+];
 
 const APPROACH_BUCKETS = [
   { label: "40-60", min: 40, max: 60 },
@@ -134,6 +170,7 @@ const FOLLOW_UP_CONFIG = {
 
 let activeRound = loadActiveRound();
 let rounds = loadRounds();
+let profile = loadProfile();
 let currentHoleIndex = activeRound?.currentHoleIndex || 0;
 let charts = {};
 let pendingConfirmAction = null;
@@ -143,6 +180,10 @@ let editingCompletedRoundId = null;
 let analyticsRange = "last20";
 let analyticsTab = "overview";
 let selectedRoundFormat = "18";
+let bagEditMode = false;
+let draftBag = [];
+let draftWedges = [];
+let profileEditMode = false;
 
 window.__menuClick = function menuClick(event) {
   toggleRoundMenu(event);
@@ -213,7 +254,27 @@ window.__roundDetailStatsClick = function roundDetailStatsClick(event) {
 const el = {
   brandHomeBtn: document.getElementById("brandHomeBtn"),
   screenTitle: document.getElementById("screenTitle"),
-  runningScore: document.getElementById("runningScore"),
+  profileBtn: document.getElementById("profileBtn"),
+  profilePhotoInput: document.getElementById("profilePhotoInput"),
+  profilePhotoPreview: document.getElementById("profilePhotoPreview"),
+  profileMenuBtn: document.getElementById("profileMenuBtn"),
+  profileMenu: document.getElementById("profileMenu"),
+  editProfileBtn: document.getElementById("editProfileBtn"),
+  profileNameDisplay: document.getElementById("profileNameDisplay"),
+  profileNameEditor: document.getElementById("profileNameEditor"),
+  profileGoalEditor: document.getElementById("profileGoalEditor"),
+  profileNameInput: document.getElementById("profileNameInput"),
+  currentHandicapInput: document.getElementById("currentHandicapInput"),
+  handicapGoalInput: document.getElementById("handicapGoalInput"),
+  handicapGoalDateInput: document.getElementById("handicapGoalDateInput"),
+  saveProfileGoalBtn: document.getElementById("saveProfileGoalBtn"),
+  profileHandicapSummary: document.getElementById("profileHandicapSummary"),
+  profileBagPanel: document.getElementById("profileBagPanel"),
+  bagCount: document.getElementById("bagCount"),
+  bagMenuBtn: document.getElementById("bagMenuBtn"),
+  bagMenu: document.getElementById("bagMenu"),
+  editBagBtn: document.getElementById("editBagBtn"),
+  clubSelector: document.getElementById("clubSelector"),
   courseSelect: document.getElementById("courseSelect"),
   startPanel: document.getElementById("startPanel"),
   startRoundBtn: document.getElementById("startRoundBtn"),
@@ -248,7 +309,9 @@ const el = {
   pickedUpValue: document.getElementById("pickedUpValue"),
   fairwayField: document.getElementById("fairwayField"),
   fairwayFollowup: document.getElementById("fairwayFollowup"),
+  teeClubSelect: document.getElementById("teeClubSelect"),
   approachDistanceInput: document.getElementById("approachDistanceInput"),
+  approachClubSelect: document.getElementById("approachClubSelect"),
   approachFollowup: document.getElementById("approachFollowup"),
   puttChoiceButtons: Array.from(document.querySelectorAll(".putt-choice")),
   otherPuttsWrap: document.getElementById("otherPuttsWrap"),
@@ -258,6 +321,12 @@ const el = {
   otherChipsWrap: document.getElementById("otherChipsWrap"),
   otherChipsSelect: document.getElementById("otherChipsSelect"),
   chipTypeFields: document.getElementById("chipTypeFields"),
+  fairwayBunkerField: document.getElementById("fairwayBunkerField"),
+  fairwayBunkerToggleBtn: document.getElementById("fairwayBunkerToggleBtn"),
+  fairwayBunkerPanel: document.getElementById("fairwayBunkerPanel"),
+  fairwayBunkerChoiceButtons: Array.from(document.querySelectorAll(".fairway-bunker-choice")),
+  otherFairwayBunkerWrap: document.getElementById("otherFairwayBunkerWrap"),
+  otherFairwayBunkerSelect: document.getElementById("otherFairwayBunkerSelect"),
   bunkerChoiceButtons: Array.from(document.querySelectorAll(".bunker-choice")),
   otherBunkerWrap: document.getElementById("otherBunkerWrap"),
   otherBunkerSelect: document.getElementById("otherBunkerSelect"),
@@ -273,6 +342,8 @@ const el = {
   analyticsContent: document.getElementById("analyticsContent"),
   roundList: document.getElementById("roundList"),
   roundListSection: document.getElementById("roundListSection"),
+  roundExportCountSelect: document.getElementById("roundExportCountSelect"),
+  exportRoundsBtn: document.getElementById("exportRoundsBtn"),
   roundDetailSection: document.getElementById("roundDetailSection"),
   roundDetailBackBtn: document.getElementById("roundDetailBackBtn"),
   roundDetailTitle: document.getElementById("roundDetailTitle"),
@@ -306,6 +377,7 @@ init();
 function init() {
   saveMeta();
   populateCourses();
+  renderProfile();
   bindEvents();
   updateResumeButton();
   if (activeRound) showHole();
@@ -329,6 +401,29 @@ function bindEvents() {
     tab.addEventListener("click", () => setView(tab.dataset.view));
   });
   el.brandHomeBtn.addEventListener("click", () => setView("dashboard"));
+  el.profileBtn.addEventListener("click", () => setView("profile"));
+  el.saveProfileGoalBtn.addEventListener("click", saveProfileSummary);
+  el.profilePhotoInput.addEventListener("change", handleProfilePhotoChange);
+  el.profileMenuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    el.profileMenu.classList.toggle("hidden");
+  });
+  el.editProfileBtn.addEventListener("click", () => {
+    profileEditMode = true;
+    el.profileMenu.classList.add("hidden");
+    renderProfile();
+  });
+  el.bagMenuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    el.bagMenu.classList.toggle("hidden");
+  });
+  el.editBagBtn.addEventListener("click", () => {
+    bagEditMode = true;
+    draftBag = [...profile.bag];
+    draftWedges = profile.wedges.map((wedge) => ({ ...wedge }));
+    el.bagMenu.classList.add("hidden");
+    renderClubSelector();
+  });
   document.querySelectorAll("[data-dashboard-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.dashboardView));
   });
@@ -421,6 +516,21 @@ function bindEvents() {
     button.addEventListener("click", () => handleChipChoice(button.dataset.chipChoice));
   });
   el.otherChipsSelect.addEventListener("change", handleOtherChipsChange);
+  el.teeClubSelect.addEventListener("change", () => {
+    if (!activeRound) return;
+    currentHole().teeClub = el.teeClubSelect.value || null;
+    persistActiveRound();
+  });
+  el.approachClubSelect.addEventListener("change", () => {
+    if (!activeRound) return;
+    currentHole().approachClub = el.approachClubSelect.value || null;
+    persistActiveRound();
+  });
+  el.fairwayBunkerToggleBtn.addEventListener("click", toggleFairwayBunkerPanel);
+  el.fairwayBunkerChoiceButtons.forEach((button) => {
+    button.addEventListener("click", () => handleFairwayBunkerChoice(button.dataset.fairwayBunkerChoice));
+  });
+  el.otherFairwayBunkerSelect.addEventListener("change", handleOtherFairwayBunkerChange);
   el.bunkerChoiceButtons.forEach((button) => {
     button.addEventListener("click", () => handleBunkerChoice(button.dataset.bunkerChoice));
   });
@@ -432,6 +542,7 @@ function bindEvents() {
   el.otherPenaltySelect.addEventListener("change", handleOtherPenaltyChange);
 
   el.roundDetailBackBtn.addEventListener("click", closeRoundDetail);
+  el.exportRoundsBtn.addEventListener("click", exportSelectedRounds);
   el.roundDetailStatsBtn.addEventListener("click", () => {
     if (selectedRoundId) editRound(selectedRoundId);
   });
@@ -444,6 +555,257 @@ function bindEvents() {
 function populateCourses() {
   el.courseSelect.innerHTML = COURSES.map((course) => `<option value="${course.name}">${course.name}</option>`).join("");
   updateRoundFormatOptions();
+}
+
+function renderProfile() {
+  if (!profile.name && profile.currentHandicap === null && profile.handicapGoal === null) profileEditMode = true;
+  el.profileNameInput.value = profile.name || "";
+  el.currentHandicapInput.value = profile.currentHandicap ?? "";
+  el.handicapGoalInput.value = profile.handicapGoal ?? "";
+  el.handicapGoalDateInput.value = profile.handicapGoalDate || "";
+  renderProfileName();
+  renderProfilePhoto();
+  renderProfileSummary();
+  renderClubSelector();
+}
+
+function saveProfileSummary() {
+  const name = el.profileNameInput.value.trim() || profile.name;
+  const currentHandicap = numberOrNull(el.currentHandicapInput.value);
+  const handicapGoal = numberOrNull(el.handicapGoalInput.value);
+  profile.name = name;
+  profile.currentHandicap = currentHandicap;
+  profile.handicapGoal = handicapGoal;
+  profile.handicapGoalDate = el.handicapGoalDateInput.value;
+  profile.handicapGoals = [
+    {
+      date: new Date().toISOString().slice(0, 10),
+      currentHandicap,
+      handicapGoal,
+      handicapGoalDate: profile.handicapGoalDate
+    },
+    ...profile.handicapGoals
+  ].slice(0, 25);
+  profileEditMode = false;
+  saveProfile();
+  renderProfile();
+}
+
+function renderProfileName() {
+  el.profileNameDisplay.textContent = profile.name || "";
+  el.profileNameDisplay.classList.toggle("hidden", !profile.name || profileEditMode);
+  el.profileNameEditor.classList.toggle("hidden", !profileEditMode);
+  el.profileGoalEditor.classList.toggle("hidden", !profileEditMode);
+}
+
+function renderProfileSummary() {
+  const current = displayCellValue(profile.currentHandicap);
+  const goal = displayCellValue(profile.handicapGoal);
+  const date = profile.handicapGoalDate ? `, by ${profile.handicapGoalDate}` : "";
+  el.profileHandicapSummary.textContent = `My current handicap is: ${current} and my goal is ${goal}${date}.`;
+}
+
+function renderProfilePhoto() {
+  el.profilePhotoPreview.style.backgroundImage = profile.photo ? `url("${profile.photo}")` : "";
+  el.profilePhotoPreview.classList.toggle("has-photo", Boolean(profile.photo));
+}
+
+function handleProfilePhotoChange() {
+  const file = el.profilePhotoInput.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    profile.photo = String(reader.result || "");
+    saveProfile();
+    renderProfilePhoto();
+  });
+  reader.readAsDataURL(file);
+}
+
+function renderClubSelector() {
+  if (!bagEditMode) {
+    renderSavedBagView();
+    renderBagCount();
+    return;
+  }
+  const selectedBag = new Set(draftBag);
+  const standardGroups = CLUB_GROUPS.map((group) => `
+    <fieldset class="club-group">
+      <legend>${group.label}</legend>
+      <div class="club-grid">
+        ${group.clubs.map((club) => `
+          <label class="club-chip">
+            <input type="checkbox" value="${escapeAttr(club)}" ${selectedBag.has(club) ? "checked" : ""}>
+            <span>${club}</span>
+          </label>
+        `).join("")}
+      </div>
+    </fieldset>
+  `).join("");
+  const putterIndex = standardGroups.lastIndexOf("<fieldset");
+  el.clubSelector.innerHTML = `
+    <button class="primary-action" type="button" data-save-bag>Save bag</button>
+    ${standardGroups.slice(0, putterIndex)}
+    ${renderWedgeSelector()}
+    ${standardGroups.slice(putterIndex)}
+    <button class="primary-action" type="button" data-save-bag>Save bag</button>
+  `;
+  el.clubSelector.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const selected = new Set(draftBag);
+      if (input.checked) selected.add(input.value);
+      else selected.delete(input.value);
+      draftBag = Array.from(selected);
+      renderBagCount();
+    });
+  });
+  el.clubSelector.querySelectorAll("[data-remove-wedge]").forEach((button) => {
+    button.addEventListener("click", () => {
+      draftWedges = draftWedges.filter((wedge) => wedge.id !== button.dataset.removeWedge);
+      renderClubSelector();
+    });
+  });
+  el.clubSelector.querySelectorAll("[data-save-bag]").forEach((button) => button.addEventListener("click", saveBagSelection));
+  const addWedgeBtn = document.getElementById("addWedgeBtn");
+  addWedgeBtn.addEventListener("click", addWedgeFromInputs);
+  renderBagCount();
+}
+
+function renderSavedBagView() {
+  const clubs = allSelectedClubsForDisplay();
+  el.clubSelector.innerHTML = clubs.length
+    ? `<div class="saved-bag-list">${clubs.map((club) => `<div class="saved-bag-item">${escapeHtml(club)}</div>`).join("")}</div>`
+    : `<p class="analytics-note">No clubs saved yet. Use the menu to update your bag.</p>`;
+}
+
+function renderWedgeSelector() {
+  return `
+    <fieldset class="club-group">
+      <legend>Wedges</legend>
+      <div class="wedge-entry-row">
+        <input id="wedgeNameInput" type="text" placeholder="Pitching">
+        <input id="wedgeLoftInput" type="number" inputmode="numeric" min="1" max="90" placeholder="43">
+        <button class="secondary-action" type="button" id="addWedgeBtn">Add wedge</button>
+      </div>
+      <div class="club-grid wedge-list">
+        ${draftWedges.map((wedge) => `
+          <div class="club-chip wedge-chip">
+            <span>${escapeHtml(formatWedgeLabel(wedge))}</span>
+            <button class="wedge-remove-button" type="button" data-remove-wedge="${wedge.id}" aria-label="Remove ${escapeAttr(formatWedgeLabel(wedge))}">X</button>
+          </div>
+        `).join("")}
+      </div>
+    </fieldset>
+  `;
+}
+
+function addWedgeFromInputs() {
+  const nameInput = document.getElementById("wedgeNameInput");
+  const loftInput = document.getElementById("wedgeLoftInput");
+  const name = nameInput.value.trim();
+  const loft = numberOrNull(loftInput.value);
+  if (!name && loft === null) return;
+  draftWedges = [
+    ...draftWedges,
+    { id: `wedge_${Date.now()}`, name, loft }
+  ];
+  renderClubSelector();
+}
+
+function saveBagSelection() {
+  profile.bag = [...draftBag];
+  profile.wedges = draftWedges.map((wedge) => ({ ...wedge }));
+  bagEditMode = false;
+  saveProfile();
+  renderClubSelector();
+}
+
+function formatWedgeLabel(wedge) {
+  const name = wedge.name?.trim();
+  const loft = numberOrNull(wedge.loft);
+  if (name && loft !== null) return `${name} - ${loft}`;
+  if (name) return name;
+  return `${loft}degree`;
+}
+
+function renderBagCount() {
+  const count = (bagEditMode ? draftBag.length + draftWedges.length : profile.bag.length + profile.wedges.length);
+  el.bagCount.textContent = `${count}/14`;
+  el.bagCount.classList.toggle("is-good", count === 14);
+  el.bagCount.classList.toggle("is-over", count > 14);
+}
+
+function allSelectedClubsForDisplay() {
+  const wedges = profile.wedges.map(formatWedgeLabel);
+  const clubs = [];
+  CLUB_GROUPS.forEach((group) => {
+    if (group.label === "Putter") clubs.push(...wedges);
+    clubs.push(...group.clubs.filter((club) => profile.bag.includes(club)));
+  });
+  return clubs;
+}
+
+function clubBuckets() {
+  const standard = profile.bag.filter((club) => club !== "Putter");
+  const wedges = profile.wedges.map(formatWedgeLabel);
+  return {
+    driverWoodsHybrids: standard.filter((club) => club === "Driver" || club.includes("Wood") || club.includes("Hybrid")),
+    woodsHybridsDriver: standard.filter((club) => club === "Driver" || club.includes("Wood") || club.includes("Hybrid")),
+    woodsHybrids: standard.filter((club) => club.includes("Wood") || club.includes("Hybrid")),
+    irons: standard.filter((club) => club.includes("Iron")),
+    wedges
+  };
+}
+
+function selectableTeeClubsForHole(hole) {
+  const { driverWoodsHybrids, irons, wedges } = clubBuckets();
+  if (hole.par === 3) return [...sortIronsAscending(irons), ...sortWedgesByLoft(wedges), ...sortLongClubs(driverWoodsHybrids)];
+  return [...sortLongClubs(driverWoodsHybrids), ...sortIronsAscending(irons), ...sortWedgesByLoft(wedges)];
+}
+
+function renderTeeClubSelect(hole) {
+  const clubs = selectableTeeClubsForHole(hole);
+  el.teeClubSelect.innerHTML = [`<option value="">Select club</option>`, ...clubs.map((club) => `<option value="${escapeAttr(club)}">${escapeHtml(club)}</option>`)].join("");
+  el.teeClubSelect.value = clubs.includes(hole.teeClub) ? hole.teeClub : "";
+}
+
+function selectableApproachClubsForHole(hole) {
+  const { driverWoodsHybrids, woodsHybrids, irons, wedges } = clubBuckets();
+  if (hole.par === 3) return [...sortIronsAscending(irons), ...sortWedgesByLoft(wedges), ...sortLongClubs(driverWoodsHybrids)];
+  if (hole.par === 4) return [...sortWedgesByLoft(wedges), ...sortIronsDescending(irons)];
+  return [...sortLongClubs(woodsHybrids), ...sortIronsAscending(irons), ...sortWedgesByLoft(wedges)];
+}
+
+function renderApproachClubSelect(hole) {
+  const clubs = selectableApproachClubsForHole(hole);
+  el.approachClubSelect.innerHTML = [`<option value="">Select club</option>`, ...clubs.map((club) => `<option value="${escapeAttr(club)}">${escapeHtml(club)}</option>`)].join("");
+  el.approachClubSelect.value = clubs.includes(hole.approachClub) ? hole.approachClub : "";
+}
+
+function sortLongClubs(clubs) {
+  const rank = (club) => {
+    if (club === "Driver") return 0;
+    const number = Number(club.match(/\d+/)?.[0] || 99);
+    const typeOffset = club.includes("Wood") ? 10 : club.includes("Hybrid") ? 30 : 50;
+    return typeOffset + number;
+  };
+  return clubs.slice().sort((a, b) => rank(a) - rank(b));
+}
+
+function sortIronsAscending(clubs) {
+  return clubs.slice().sort((a, b) => Number(a.match(/\d+/)?.[0] || 99) - Number(b.match(/\d+/)?.[0] || 99));
+}
+
+function sortIronsDescending(clubs) {
+  return clubs.slice().sort((a, b) => Number(b.match(/\d+/)?.[0] || 0) - Number(a.match(/\d+/)?.[0] || 0));
+}
+
+function sortWedgesByLoft(clubs) {
+  return clubs.slice().sort((a, b) => wedgeLoftFromLabel(a) - wedgeLoftFromLabel(b));
+}
+
+function wedgeLoftFromLabel(label) {
+  return Number(String(label).match(/\d+/)?.[0] || 99);
 }
 
 function selectedCourse() {
@@ -527,15 +889,19 @@ function createRoundState(course, formatId = "18") {
         score: null,
         pickedUp: false,
         pickedUpManual: false,
+        teeClub: null,
         fairway: par === 3 ? null : null,
         fairwayMiss: null,
         gir: null,
+        approachClub: null,
         approachDistance: null,
         approachHit: null,
         approachMiss: null,
         chips: null,
         chipsEntryMode: null,
         chipTypes: [],
+        fairwayBunker: null,
+        fairwayBunkerEntryMode: null,
         greensideBunker: null,
         bunkerEntryMode: null,
         penaltyType: null,
@@ -565,11 +931,16 @@ function showHole() {
   el.menuPickedUpBtn.classList.toggle("is-active", Boolean(hole.pickedUp));
   el.approachDistanceInput.value = hole.approachDistance ?? "";
   el.fairwayField.classList.toggle("hidden", hole.par === 3);
+  el.teeClubSelect.closest("div").classList.toggle("hidden", hole.par === 3);
   setRadio("gir", hole.gir);
   renderShotUi("fairway", hole.par === 3 ? null : deriveShotState(hole.fairway, hole.fairwayMiss), hole.fairwayMiss);
+  renderTeeClubSelect(hole);
+  renderApproachClubSelect(hole);
   renderShotUi("approach", deriveShotState(hole.approachHit, hole.approachMiss), hole.approachMiss);
   renderPuttUi(hole.putts, hole.puttDistances, hole.puttsEntryMode);
   renderChipUi(hole.chips, hole.chipTypes, hole.chipsEntryMode);
+  el.fairwayBunkerPanel.classList.add("hidden");
+  renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
   renderBunkerUi(hole.greensideBunker, hole.bunkerEntryMode);
   updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
   el.prevHoleBtn.disabled = currentHoleIndex === 0;
@@ -684,11 +1055,15 @@ function saveCurrentHole() {
     score: pickedUp ? hole.par + 3 : enteredScore,
     pickedUp,
     pickedUpManual: hole.pickedUpManual,
+    teeClub: el.teeClubSelect.value || null,
     gir: radioValue("gir"),
+    approachClub: el.approachClubSelect.value || null,
     approachDistance: limitNumberOrNull(el.approachDistanceInput.value, 999),
     chips: hole.chips ?? null,
     chipsEntryMode: hole.chipsEntryMode ?? null,
     chipTypes: hole.chipTypes ?? [],
+    fairwayBunker: hole.fairwayBunker ?? null,
+    fairwayBunkerEntryMode: hole.fairwayBunkerEntryMode ?? null,
     greensideBunker: hole.greensideBunker ?? null,
     bunkerEntryMode: hole.bunkerEntryMode ?? null,
     puttsEntryMode: hole.puttsEntryMode ?? null,
@@ -760,11 +1135,14 @@ function applyShotSelection(field, value) {
     if (value === "hit") {
       hole.fairway = true;
       hole.fairwayMiss = null;
+      hole.fairwayBunker = null;
+      hole.fairwayBunkerEntryMode = null;
     } else {
       hole.fairway = false;
       hole.fairwayMiss = value;
     }
     renderShotUi("fairway", value, hole.fairwayMiss);
+    renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
   } else {
     if (value === "hit") {
       hole.approachHit = true;
@@ -784,7 +1162,10 @@ function clearShotSelection(field) {
   if (field === "fairway") {
     hole.fairway = null;
     hole.fairwayMiss = null;
+    hole.fairwayBunker = null;
+    hole.fairwayBunkerEntryMode = null;
     renderShotUi("fairway", null, null);
+    renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
   } else {
     hole.approachHit = null;
     hole.approachMiss = null;
@@ -856,6 +1237,7 @@ function applyFollowup(field, value) {
     hole.fairway = false;
     hole.fairwayMiss = value;
     renderShotUi("fairway", findPrimaryMiss(value), value);
+    renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
   } else {
     hole.approachHit = false;
     hole.approachMiss = value;
@@ -890,6 +1272,8 @@ function clearHoleValues(hole) {
   hole.chips = null;
   hole.chipsEntryMode = null;
   hole.chipTypes = [];
+  hole.fairwayBunker = null;
+  hole.fairwayBunkerEntryMode = null;
   hole.greensideBunker = null;
   hole.bunkerEntryMode = null;
   hole.putts = null;
@@ -926,9 +1310,12 @@ function closeRoundMenu() {
 
 function handleDocumentClick(event) {
   if (!event.target.closest(".menu-anchor")) closeRoundMenu();
+  if (!event.target.closest("#profileMenu") && !event.target.closest("#profileMenuBtn")) el.profileMenu.classList.add("hidden");
+  if (!event.target.closest("#bagMenu") && !event.target.closest("#bagMenuBtn")) el.bagMenu.classList.add("hidden");
   if (!event.target.closest(".card-menu-anchor")) {
+    const hadOpenCardMenu = Boolean(openRoundCardMenuId);
     openRoundCardMenuId = null;
-    renderRounds();
+    if (hadOpenCardMenu) renderRounds();
   }
 }
 
@@ -1120,6 +1507,71 @@ function renderChipUi(chips, chipTypes = [], entryMode = null) {
   });
 }
 
+function toggleFairwayBunkerPanel() {
+  el.fairwayBunkerPanel.classList.toggle("hidden");
+  updateFairwayBunkerButtonState(currentHole());
+}
+
+function handleFairwayBunkerChoice(choice) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  if (choice === "other") {
+    if (hole.fairwayBunkerEntryMode === "other") {
+      hole.fairwayBunkerEntryMode = null;
+      hole.fairwayBunker = null;
+    } else {
+      hole.fairwayBunkerEntryMode = "other";
+      hole.fairwayBunker = numberOrNull(el.otherFairwayBunkerSelect.value);
+    }
+  } else if (hole.fairwayBunkerEntryMode === "preset" && hole.fairwayBunker === Number(choice)) {
+    hole.fairwayBunkerEntryMode = null;
+    hole.fairwayBunker = null;
+  } else {
+    hole.fairwayBunkerEntryMode = "preset";
+    hole.fairwayBunker = Number(choice);
+  }
+  renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
+  persistActiveRound();
+}
+
+function handleOtherFairwayBunkerChange() {
+  if (!activeRound) return;
+  const hole = currentHole();
+  hole.fairwayBunkerEntryMode = "other";
+  hole.fairwayBunker = numberOrNull(el.otherFairwayBunkerSelect.value);
+  renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
+  persistActiveRound();
+}
+
+function renderFairwayBunkerUi(value, entryMode = null) {
+  const hole = currentHole();
+  const showField = shouldShowFairwayBunker(hole);
+  el.fairwayBunkerField.classList.toggle("hidden", !showField);
+  if (!showField) {
+    el.fairwayBunkerPanel.classList.add("hidden");
+  }
+  const hasValue = value !== null && value !== undefined;
+  el.fairwayBunkerToggleBtn.textContent = hasValue ? `Fairway bunkers: ${value}` : "Fairway bunkers";
+  el.fairwayBunkerChoiceButtons.forEach((button) => {
+    const active = button.dataset.fairwayBunkerChoice === "other" ? entryMode === "other" : String(value) === button.dataset.fairwayBunkerChoice;
+    button.classList.toggle("is-active", active);
+  });
+  el.otherFairwayBunkerWrap.classList.toggle("hidden", entryMode !== "other");
+  el.otherFairwayBunkerSelect.value = entryMode === "other" && value !== null ? String(value) : "";
+  updateFairwayBunkerButtonState(hole);
+}
+
+function shouldShowFairwayBunker(hole) {
+  if (!hole || hole.par === 3) return false;
+  if (hole.par === 5) return true;
+  return hole.fairway === false;
+}
+
+function updateFairwayBunkerButtonState(hole) {
+  const active = Boolean(hole?.fairwayBunker !== null && hole?.fairwayBunker !== undefined || hole?.fairwayBunkerEntryMode === "other" || !el.fairwayBunkerPanel.classList.contains("hidden"));
+  el.fairwayBunkerToggleBtn.classList.toggle("is-active", active);
+}
+
 function handleBunkerChoice(choice) {
   if (!activeRound) return;
   const hole = currentHole();
@@ -1229,10 +1681,13 @@ function renderDashboard() {
   const recent7 = countRoundsSince(7);
   const recent30 = countRoundsSince(30);
   const activeRoundLabel = activeRound && !editingCompletedRoundId ? `${roundDisplayName(activeRound)} · Hole ${currentHole().hole}` : "None";
+  const handicapLedger = calculateHandicapLedger(scoredRounds);
+  const currentHandicap = handicapLedger.at(-1)?.handicapIndex ?? null;
 
   el.dashboardStats.innerHTML = [
     ["Completed rounds", rounds.length],
     ["Scoring average", scoredRounds.length ? average(scoredRounds.map(adjustedRoundScore)).toFixed(1) : "0.0"],
+    ["Handicap index", formatHandicapIndex(currentHandicap)],
     ["Played last 7 days", recent7],
     ["Active round", activeRoundLabel]
   ]
@@ -1254,6 +1709,14 @@ function renderDashboard() {
     scoredRounds.map((round) => round.date),
     scoredRounds.map(adjustedRoundScore),
     "Score"
+  );
+
+  drawChart(
+    "dashboardHandicapChart",
+    "line",
+    handicapLedger.map((item) => item.round.date),
+    handicapLedger.map((item) => item.handicapIndex),
+    "Handicap Index"
   );
 }
 
@@ -1321,6 +1784,7 @@ function buildRoundMetrics(round) {
   const score = adjustedRoundScore(round);
   const actualPuttsTotal = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
   const actualChipsTotal = holes.reduce((sum, hole) => sum + (hole.chips || 0), 0);
+  const actualFairwayBunkerTotal = holes.reduce((sum, hole) => sum + (hole.fairwayBunker || 0), 0);
   const actualBunkerTotal = holes.reduce((sum, hole) => sum + (hole.greensideBunker || 0), 0);
   const actualPenaltiesTotal = holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0);
   return {
@@ -1342,6 +1806,7 @@ function buildRoundMetrics(round) {
     puttsUnder6: holes.reduce((sum, hole) => sum + countHolePuttsByDistance(hole, "under"), 0) * scale,
     firstPuttDistance: average(firstPuttDistances),
     chipsTotal: actualChipsTotal * scale,
+    fairwayBunkerTotal: actualFairwayBunkerTotal * scale,
     bunkerTotal: actualBunkerTotal * scale,
     penaltiesTotal: actualPenaltiesTotal * scale,
     windSpeed: context.windSpeed,
@@ -1449,6 +1914,7 @@ function renderAnalyticsShortGame(filteredRounds, roundMetrics) {
         ${renderStatCards([
           ["Scrambling %", `${Math.round(average(roundMetrics.map((item) => item.scramblePct)))}%`],
           ["Chips/Round", average(roundMetrics.map((item) => item.chipsTotal)).toFixed(1)],
+          ["Fairway Bunker/Round", average(roundMetrics.map((item) => item.fairwayBunkerTotal)).toFixed(1)],
           ["Bunker/Round", average(roundMetrics.map((item) => item.bunkerTotal)).toFixed(1)],
           ["Penalties/Round", average(roundMetrics.map((item) => item.penaltiesTotal)).toFixed(1)]
         ])}
@@ -1460,8 +1926,9 @@ function renderAnalyticsShortGame(filteredRounds, roundMetrics) {
   `;
   drawMultiLineChart("analyticsShortGameTrend", filteredRounds.map((round) => round.date), [
     { label: "Chips", data: roundMetrics.map((item) => item.chipsTotal), color: "#041d4d" },
-    { label: "Bunker", data: roundMetrics.map((item) => item.bunkerTotal), color: "#63d11f" },
-    { label: "Penalties", data: roundMetrics.map((item) => item.penaltiesTotal), color: "#8aa2d3" }
+    { label: "Fairway bunker", data: roundMetrics.map((item) => item.fairwayBunkerTotal), color: "#63d11f" },
+    { label: "Greenside bunker", data: roundMetrics.map((item) => item.bunkerTotal), color: "#8aa2d3" },
+    { label: "Penalties", data: roundMetrics.map((item) => item.penaltiesTotal), color: "#d48f3f" }
   ], "Count");
 }
 
@@ -1562,6 +2029,7 @@ function renderAnalyticsComparisons(filteredRounds, roundMetrics) {
 }
 
 function renderRounds() {
+  const countingRoundIds = currentCountingRoundIds(rounds);
   if (!rounds.length) {
     el.roundList.innerHTML = `<div class="panel"><p>No completed rounds yet.</p></div>`;
     el.roundListSection.classList.remove("hidden");
@@ -1575,8 +2043,11 @@ function renderRounds() {
   el.roundList.innerHTML = rounds
     .slice()
     .reverse()
-    .map((round) => `
-      <article class="round-card">
+    .map((round) => {
+      const handicap = calculateScoreDifferential(round);
+      return `
+      <article class="round-card${countingRoundIds.has(round.id) ? " is-counting-handicap" : ""}">
+        ${countingRoundIds.has(round.id) ? `<span class="counting-handicap-badge" title="Counting handicap round">✓</span>` : ""}
         <header>
           <div>
             <h2>${roundDisplayName(round)}</h2>
@@ -1584,20 +2055,22 @@ function renderRounds() {
           </div>
           <strong>${formatRelative(totalScore(round), totalPar(round))}</strong>
         </header>
-        <p class="round-summary">${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR</p>
+        <p class="round-summary">${totalScore(round)} shots · ${sumKnownPutts(round)} putts · ${girCount(round)} GIR · Diff ${formatDifferential(handicap.differential)}</p>
         <div class="card-actions">
           <button class="secondary-action" type="button" data-view-round="${round.id}">View</button>
           <button class="secondary-action" type="button" data-view-round-stats="${round.id}">View stats</button>
           <div class="card-menu-anchor">
             <button class="card-menu-button" type="button" data-round-menu="${round.id}" aria-label="Round options">...</button>
             <div class="card-menu${openRoundCardMenuId === round.id ? "" : " hidden"}">
+              <button class="card-menu-item" type="button" data-export-round="${round.id}">Export round</button>
               <button class="card-menu-item" type="button" data-edit="${round.id}">Edit</button>
               <button class="card-menu-item hole-menu-item-danger" type="button" data-delete="${round.id}">Delete</button>
             </div>
           </div>
         </div>
       </article>
-    `)
+    `;
+    })
     .join("");
   document.querySelectorAll("[data-view-round]").forEach((button) => button.addEventListener("click", () => openRoundDetail(button.dataset.viewRound)));
   document.querySelectorAll("[data-view-round-stats]").forEach((button) => button.addEventListener("click", () => openRoundStats(button.dataset.viewRoundStats)));
@@ -1608,6 +2081,7 @@ function renderRounds() {
       renderRounds();
     })
   );
+  document.querySelectorAll("[data-export-round]").forEach((button) => button.addEventListener("click", () => exportOneRound(button.dataset.exportRound)));
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => editRound(button.dataset.edit)));
   document.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => deleteRound(button.dataset.delete)));
 }
@@ -1615,13 +2089,14 @@ function renderRounds() {
 function openRoundDetail(roundId) {
   const round = rounds.find((item) => item.id === roundId);
   if (!round) return;
+  const handicap = calculateScoreDifferential(round);
   selectedRoundId = roundId;
   openRoundCardMenuId = null;
   el.roundListSection.classList.add("hidden");
   el.roundDetailSection.classList.remove("hidden");
   el.roundStatsSection.classList.add("hidden");
   el.roundDetailTitle.textContent = roundDisplayName(round);
-  el.roundDetailMeta.textContent = round.date;
+  el.roundDetailMeta.textContent = `${round.date} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
   el.roundDetailTotal.textContent = totalScore(round);
   el.roundDetailRelative.textContent = formatRelative(totalScore(round), totalPar(round));
   el.roundDetailParTotal.textContent = `Par ${totalPar(round)}`;
@@ -1659,13 +2134,14 @@ function openRoundStats(roundId) {
   const round = rounds.find((item) => item.id === roundId);
   if (!round) return;
   const stats = calculateRoundStats(round);
+  const handicap = calculateScoreDifferential(round);
   selectedRoundId = roundId;
   openRoundCardMenuId = null;
   el.roundListSection.classList.add("hidden");
   el.roundDetailSection.classList.add("hidden");
   el.roundStatsSection.classList.remove("hidden");
   el.roundStatsTitle.textContent = `${roundDisplayName(round)} Stats`;
-  el.roundStatsMeta.textContent = round.date;
+  el.roundStatsMeta.textContent = `${round.date} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
   el.roundStatsGross.textContent = totalScore(round);
   el.roundStatsRelative.textContent = formatRelative(totalScore(round), totalPar(round));
   el.roundStatsGrid.innerHTML = [
@@ -1676,7 +2152,10 @@ function openRoundStats(roundId) {
     ["Avg Par 3", stats.avgPar3],
     ["Avg Par 4", stats.avgPar4],
     ["Avg Par 5", stats.avgPar5],
+    ["Score differential", formatDifferential(handicap.differential)],
+    ["PCC", handicap.pcc],
     ["3-putts", stats.threePutts],
+    ["Fairway bunkers", stats.fairwayBunkerTotal],
     ["Penalties", stats.penaltiesTotal],
     ["Scrambling", `${stats.scramblePct}%`]
   ]
@@ -1694,6 +2173,7 @@ function openRoundStats(roundId) {
         <td>${countPuttsByDistance(hole, "over")}</td>
         <td>${countPuttsByDistance(hole, "under")}</td>
         <td>${displayCellValue(hole.chips)}</td>
+        <td>${displayCellValue(hole.fairwayBunker)}</td>
         <td>${displayCellValue(hole.greensideBunker)}</td>
         <td>${displayCellValue(hole.penaltyStrokes)}</td>
       </tr>
@@ -2200,18 +2680,78 @@ function exportJson() {
   download("foreball-rounds.json", JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), rounds }, null, 2), "application/json");
 }
 
+function exportOneRound(roundId) {
+  const round = rounds.find((item) => item.id === roundId);
+  if (!round) return;
+  openRoundCardMenuId = null;
+  renderRounds();
+  const format = askExportFormat();
+  if (!format) return;
+  exportRoundSet([round], format, `foreball-${slugify(round.course)}-${round.date}`);
+}
+
+function exportSelectedRounds() {
+  if (!rounds.length) {
+    window.alert("No rounds to export yet.");
+    return;
+  }
+  const countValue = el.roundExportCountSelect.value;
+  const sortedRounds = rounds.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const selectedRounds = countValue === "all" ? sortedRounds : sortedRounds.slice(0, Number(countValue));
+  const format = askExportFormat();
+  if (!format) return;
+  const countLabel = countValue === "all" ? "all" : `last-${selectedRounds.length}`;
+  exportRoundSet(selectedRounds, format, `foreball-rounds-${countLabel}`);
+}
+
+function askExportFormat() {
+  const value = window.prompt("Export format? Type csv, json, or txt.", "csv");
+  if (value === null) return null;
+  const format = value.trim().toLowerCase();
+  if (["csv", "json", "txt"].includes(format)) return format;
+  window.alert("Please enter csv, json, or txt.");
+  return null;
+}
+
+function exportRoundSet(sourceRounds, format, baseFilename = "foreball-rounds") {
+  const normalizedRounds = sourceRounds.map(normalizeRound);
+  const exportRounds = normalizedRounds.map((round) => ({
+    ...round,
+    handicap: calculateScoreDifferential(round)
+  }));
+  if (format === "json") {
+    download(`${baseFilename}.json`, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), rounds: exportRounds }, null, 2), "application/json");
+    return;
+  }
+  if (format === "txt") {
+    download(`${baseFilename}.txt`, normalizedRounds.map(formatRoundText).join("\n\n---\n\n"), "text/plain");
+    return;
+  }
+  download(`${baseFilename}.csv`, buildRoundsCsv(normalizedRounds), "text/csv");
+}
+
 function exportCsv() {
+  download("foreball-rounds.csv", buildRoundsCsv(rounds), "text/csv");
+}
+
+function buildRoundsCsv(sourceRounds) {
   const header = [
     "roundId",
     "date",
     "course",
     "round_format",
+    "score_differential",
+    "adjusted_gross_score",
+    "course_rating",
+    "slope_rating",
+    "pcc",
     "weather",
     "wind_speed",
     "wind_direction",
     "food",
     "round_notes",
     "hole",
+    "club_used",
     "par",
     "score",
     "pickedUp",
@@ -2221,28 +2761,37 @@ function exportCsv() {
     "approachHit",
     "approachMiss",
     "approachDistance",
+    "approachClub",
     "chips",
     "chipTypes",
+    "fairwayBunker",
     "greensideBunker",
     "penaltyType",
     "penaltyStrokes",
     "putts",
     "puttDistances"
   ];
-  const rows = rounds.flatMap((round) =>
+  const rows = sourceRounds.flatMap((round) =>
     round.holes.map((hole) => {
       const context = normalizeRoundContext(round.context);
+      const handicap = calculateScoreDifferential(round);
       return [
       round.id,
       round.date,
       round.course,
       round.formatLabel,
+      handicap.differential,
+      handicap.adjustedGrossScore,
+      handicap.courseRating,
+      handicap.slopeRating,
+      handicap.pcc,
       context.weather,
       context.windSpeed,
       context.windDirection,
       context.food.map((entry) => `${entry.name}${entry.holes.length ? ` (${formatHoleList(entry.holes)})` : ""}`).join("|"),
       context.notes,
       hole.hole,
+      hole.teeClub,
       hole.par,
       hole.score,
       hole.pickedUp,
@@ -2252,8 +2801,10 @@ function exportCsv() {
       hole.approachHit,
       hole.approachMiss,
       hole.approachDistance,
+      hole.approachClub,
       hole.chips,
       (hole.chipTypes || []).join("|"),
+      hole.fairwayBunker,
       hole.greensideBunker,
       hole.penaltyType,
       hole.penaltyStrokes,
@@ -2262,8 +2813,55 @@ function exportCsv() {
       ];
     })
   );
-  const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
-  download("foreball-rounds.csv", csv, "text/csv");
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function formatRoundText(round) {
+  const context = normalizeRoundContext(round.context);
+  const handicap = calculateScoreDifferential(round);
+  const lines = [
+    `Course: ${roundDisplayName(round)}`,
+    `Date: ${round.date}`,
+    `Score: ${totalScore(round)} (${formatRelative(totalScore(round), totalPar(round))})`,
+    `Par: ${totalPar(round)}`,
+    `Score differential: ${formatDifferential(handicap.differential)}`,
+    `Adjusted gross score: ${displayCellValue(handicap.adjustedGrossScore)}`,
+    `Course rating: ${displayCellValue(handicap.courseRating)}`,
+    `Slope rating: ${displayCellValue(handicap.slopeRating)}`,
+    `PCC: ${handicap.pcc}`,
+    `Putts: ${sumKnownPutts(round)}`,
+    "",
+    "Round conditions",
+    `Weather: ${context.weather || "-"}`,
+    `Wind speed: ${context.windSpeed ?? "-"}${context.windSpeed !== null ? " mph" : ""}`,
+    `Wind direction: ${context.windDirection || "-"}`,
+    `Food: ${context.food.length ? context.food.map((entry) => `${entry.name}${entry.holes.length ? ` on holes ${formatHoleList(entry.holes)}` : ""}`).join("; ") : "-"}`,
+    `Notes: ${context.notes || "-"}`,
+    "",
+    "Hole-by-hole",
+    "Hole | Tee club | Approach club | Par | SI | Length | Score | Putts | Putt distances | Fairway | Approach | GIR | Chips | Fairway bunker | Greenside bunker | Penalties"
+  ];
+  round.holes.map(normalizeHole).forEach((hole) => {
+    lines.push([
+      hole.hole,
+      displayCellValue(hole.teeClub),
+      displayCellValue(hole.approachClub),
+      hole.par,
+      hole.strokeIndex ?? "-",
+      hole.length ? `${hole.length} yds` : "-",
+      displayHoleScore(hole),
+      displayCellValue(hole.putts),
+      hole.puttDistances?.length ? hole.puttDistances.join(", ") : "-",
+      formatFairwayCell(hole),
+      formatApproachCell(hole),
+      formatGirCell(hole),
+      displayCellValue(hole.chips),
+      displayCellValue(hole.fairwayBunker),
+      displayCellValue(hole.greensideBunker),
+      displayCellValue(hole.penaltyStrokes)
+    ].join(" | "));
+  });
+  return lines.join("\n");
 }
 
 function download(filename, content, type) {
@@ -2281,9 +2879,10 @@ function setView(view) {
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("is-active"));
   document.getElementById(`${view}View`).classList.add("is-active");
   el.screenTitle.textContent =
-    view === "dashboard" ? "Dashboard" : view === "scorecard" ? "Scorecard" : view === "analytics" ? "Analytics" : "Rounds";
+    view === "dashboard" ? "Dashboard" : view === "scorecard" ? "Scorecard" : view === "analytics" ? "Analytics" : view === "profile" ? "Profile" : "Rounds";
   if (view === "dashboard") queueVisibleRender(renderDashboard);
   if (view === "analytics") queueVisibleRender(renderAnalytics);
+  if (view === "profile") renderProfile();
   if (view === "rounds") renderRounds();
 }
 
@@ -2292,11 +2891,7 @@ function queueVisibleRender(renderFn) {
 }
 
 function updateRunningScore() {
-  if (!activeRound) {
-    el.runningScore.textContent = "E";
-    return;
-  }
-  el.runningScore.textContent = formatRelative(totalScore(activeRound), totalPar(activeRound));
+  return;
 }
 
 function updateResumeButton() {
@@ -2343,10 +2938,19 @@ function loadActiveRound() {
   return round ? normalizeRound(round) : null;
 }
 
+function loadProfile() {
+  return normalizeProfile(safeLoadJson(STORAGE_KEYS.profile));
+}
+
+function saveProfile() {
+  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
+}
+
 function flushPersistence() {
   try {
     if (activeRound) persistActiveRound();
     saveRounds();
+    saveProfile();
   } catch (error) {
     console.error("Persistence flush failed", error);
   }
@@ -2509,6 +3113,106 @@ function roundDisplayName(round) {
   return formatId === "18" ? round.course : `${round.course} · ${format.label}`;
 }
 
+function calculateScoreDifferential(round) {
+  if (!hasRoundScore(round)) {
+    return {
+      differential: null,
+      adjustedGrossScore: null,
+      courseRating: null,
+      slopeRating: null,
+      pcc: HANDICAP_PCC
+    };
+  }
+  const scale = roundEighteenHoleScale(round);
+  const adjustedGrossScore = totalScore(round) * scale;
+  const courseRating = courseRatingForRound(round) * scale;
+  const slopeRating = slopeRatingForRound(round);
+  const differential = roundToTenth((adjustedGrossScore - courseRating - HANDICAP_PCC) * (113 / slopeRating));
+  return {
+    differential,
+    adjustedGrossScore,
+    courseRating,
+    slopeRating,
+    pcc: HANDICAP_PCC
+  };
+}
+
+function calculateHandicapLedger(sourceRounds = rounds) {
+  const scored = sourceRounds
+    .filter(hasRoundScore)
+    .map((round, index) => ({ round, index, handicap: calculateScoreDifferential(round) }))
+    .filter((item) => item.handicap.differential !== null)
+    .sort((a, b) => {
+      const dateDiff = new Date(a.round.date) - new Date(b.round.date);
+      return dateDiff || a.index - b.index;
+    });
+
+  return scored.map((item, index) => {
+    const recent = scored.slice(Math.max(0, index - 19), index + 1);
+    const handicapIndex = handicapIndexFromDifferentials(recent.map((entry) => entry.handicap.differential));
+    const counting = selectedCountingDifferentials(recent);
+    return {
+      round: item.round,
+      differential: item.handicap.differential,
+      handicapIndex,
+      countingRoundIds: new Set(counting.map((entry) => entry.round.id))
+    };
+  });
+}
+
+function handicapIndexFromDifferentials(differentials) {
+  const allowance = handicapAllowanceForCount(differentials.length);
+  if (!allowance) return null;
+  const selected = differentials.slice().sort((a, b) => a - b).slice(0, allowance.count);
+  return roundToTenth(average(selected) + allowance.adjustment);
+}
+
+function selectedCountingDifferentials(recentEntries) {
+  const allowance = handicapAllowanceForCount(recentEntries.length);
+  if (!allowance) return [];
+  return recentEntries
+    .slice()
+    .sort((a, b) => a.handicap.differential - b.handicap.differential)
+    .slice(0, allowance.count);
+}
+
+function handicapAllowanceForCount(count) {
+  return HANDICAP_ALLOWANCES.find((item) => count >= item.min) || null;
+}
+
+function currentCountingRoundIds(sourceRounds = rounds) {
+  const current = calculateHandicapLedger(sourceRounds).at(-1);
+  return current?.countingRoundIds || new Set();
+}
+
+function courseRatingForRound(round) {
+  const course = COURSES.find((item) => item.name === round.course);
+  const total = totalPar(round);
+  const formatId = inferRoundFormat(round);
+  if (!course) return total;
+  if (formatId === "front9") return course.courseRatingFront9 ?? course.courseRating9 ?? total;
+  if (formatId === "back9") return course.courseRatingBack9 ?? course.courseRating9 ?? total;
+  if (formatId === "course9") return course.courseRating9 ?? course.courseRating ?? total;
+  return course.courseRating ?? total;
+}
+
+function slopeRatingForRound(round) {
+  const course = COURSES.find((item) => item.name === round.course);
+  return course?.slopeRating || DEFAULT_SLOPE_RATING;
+}
+
+function roundToTenth(value) {
+  return Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
+}
+
+function formatDifferential(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "—";
+}
+
+function formatHandicapIndex(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "Need 3 rounds";
+}
+
 function calculateRoundStats(round) {
   const holes = round.holes.map(normalizeHole);
   const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
@@ -2529,6 +3233,7 @@ function calculateRoundStats(round) {
     avgPar4: average(par4Scores).toFixed(1),
     avgPar5: average(par5Scores).toFixed(1),
     threePutts: puttHoles.filter((hole) => hole.putts >= 3).length,
+    fairwayBunkerTotal: holes.reduce((sum, hole) => sum + (hole.fairwayBunker || 0), 0),
     penaltiesTotal: holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0),
     scramblePct: pct(scrambleMade, missedGir.length)
   };
@@ -2547,6 +3252,10 @@ function csvCell(value) {
   if (value === null || value === undefined) return "";
   const text = String(value);
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function slugify(value) {
+  return String(value || "round").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "round";
 }
 
 function escapeHtml(value) {
@@ -2601,6 +3310,34 @@ function normalizeRoundContext(context = {}) {
   };
 }
 
+function normalizeProfile(rawProfile) {
+  const source = rawProfile && typeof rawProfile === "object" ? rawProfile : {};
+  return {
+    ...DEFAULT_PROFILE,
+    ...source,
+    currentHandicap: numberOrNull(source.currentHandicap),
+    handicapGoal: numberOrNull(source.handicapGoal),
+    handicapGoalDate: source.handicapGoalDate || "",
+    handicapGoals: Array.isArray(source.handicapGoals)
+      ? source.handicapGoals.map((entry) => ({
+          date: entry.date || "",
+          currentHandicap: numberOrNull(entry.currentHandicap),
+          handicapGoal: numberOrNull(entry.handicapGoal),
+          handicapGoalDate: entry.handicapGoalDate || ""
+        })).filter((entry) => entry.date)
+      : [],
+    bag: Array.isArray(source.bag) ? source.bag.filter((club) => typeof club === "string") : [],
+    wedges: Array.isArray(source.wedges)
+      ? source.wedges.map((wedge) => ({
+          id: wedge.id || `wedge_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          name: String(wedge.name || "").trim(),
+          loft: numberOrNull(wedge.loft)
+        })).filter((wedge) => wedge.name || wedge.loft !== null)
+      : [],
+    photo: typeof source.photo === "string" ? source.photo : ""
+  };
+}
+
 function normalizeHole(hole) {
   return {
     ...hole,
@@ -2608,13 +3345,17 @@ function normalizeHole(hole) {
     length: hole.length ?? null,
     pickedUp: Boolean(hole.pickedUp),
     pickedUpManual: Boolean(hole.pickedUpManual ?? hole.pickedUp),
+    teeClub: hole.teeClub ?? null,
     fairway: hole.fairway ?? hole.fir ?? null,
     fairwayMiss: hole.fairwayMiss ?? null,
     approachHit: hole.approachHit ?? null,
     approachMiss: hole.approachMiss ?? null,
+    approachClub: hole.approachClub ?? null,
     chips: hole.chips ?? null,
     chipsEntryMode: hole.chipsEntryMode ?? (hole.chips !== null && ![1, 2, 3].includes(hole.chips) ? "other" : hole.chips !== null ? "preset" : null),
     chipTypes: hole.chipTypes ?? [],
+    fairwayBunker: hole.fairwayBunker ?? null,
+    fairwayBunkerEntryMode: hole.fairwayBunkerEntryMode ?? (hole.fairwayBunker !== null && ![1, 2, 3].includes(hole.fairwayBunker) ? "other" : hole.fairwayBunker !== null ? "preset" : null),
     greensideBunker: hole.greensideBunker ?? null,
     bunkerEntryMode: hole.bunkerEntryMode ?? (hole.greensideBunker !== null && ![1, 2, 3].includes(hole.greensideBunker) ? "other" : hole.greensideBunker !== null ? "preset" : null),
     penaltyType: hole.penaltyType ?? null,
