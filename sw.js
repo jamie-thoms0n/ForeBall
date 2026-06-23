@@ -1,4 +1,4 @@
-const CACHE_NAME = "foreball-v2";
+const CACHE_NAME = "foreball-v3";
 const APP_SHELL = [
   "./",
   "./index.html",

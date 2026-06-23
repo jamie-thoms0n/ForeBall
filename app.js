@@ -93,21 +93,41 @@ const PENALTY_PRESETS = {
 
 const FOLLOW_UP_CONFIG = {
   fairway: {
-    left: [{ value: "hook", label: "Hook" }, { value: "left", label: "No Hook" }],
-    right: [{ value: "slice", label: "Slice" }, { value: "right", label: "No Slice" }],
+    left: [
+      { value: "overDraw", label: "Over draw" },
+      { value: "pull", label: "Pull" },
+      { value: "hook", label: "Hook" },
+      { value: "leftOther", label: "Other" }
+    ],
+    right: [
+      { value: "push", label: "Push" },
+      { value: "overFade", label: "Over fade" },
+      { value: "slice", label: "Slice" },
+      { value: "rightOther", label: "Other" }
+    ],
     short: [
-      { value: "heavy", label: "Heavy" },
-      { value: "top", label: "Topped" },
-      { value: "short", label: "Neither" }
+      { value: "bigHeavy", label: "Big heavy" },
+      { value: "smallHeavy", label: "Small heavy" },
+      { value: "shortOther", label: "Other" }
     ]
   },
   approach: {
-    left: [{ value: "hook", label: "Hook" }, { value: "left", label: "No Hook" }],
-    right: [{ value: "slice", label: "Slice" }, { value: "right", label: "No Slice" }],
+    left: [
+      { value: "overDraw", label: "Over draw" },
+      { value: "pull", label: "Pull" },
+      { value: "hook", label: "Hook" },
+      { value: "leftOther", label: "Other" }
+    ],
+    right: [
+      { value: "push", label: "Push" },
+      { value: "overFade", label: "Over fade" },
+      { value: "slice", label: "Slice" },
+      { value: "rightOther", label: "Other" }
+    ],
     short: [
-      { value: "heavy", label: "Heavy" },
-      { value: "top", label: "Topped" },
-      { value: "short", label: "Neither" }
+      { value: "bigHeavy", label: "Big heavy" },
+      { value: "smallHeavy", label: "Small heavy" },
+      { value: "shortOther", label: "Other" }
     ]
   }
 };
@@ -473,6 +493,7 @@ function goPrevHole(event) {
 function goNextHole(event) {
   if (event) event.preventDefault();
   if (!activeRound) return;
+  if (!confirmPuttDistanceOrder()) return;
   saveCurrentHole();
   if (currentHoleIndex === activeRound.holes.length - 1) showRoundContextPage();
   else {
@@ -924,6 +945,7 @@ function togglePickedUpFromMenu() {
 
 function finishRoundFromMenu() {
   if (!activeRound) return;
+  if (!confirmPuttDistanceOrder()) return;
   closeRoundMenu();
   saveCurrentHole();
   showRoundContextPage();
@@ -1015,6 +1037,14 @@ function renderPuttUi(putts, distances = [], entryMode = null) {
     const value = distances[index] ?? "";
     return `<div><label for="putt${index}">Putt ${index + 1} length (ft)</label><input id="putt${index}" class="putt-distance-input" type="number" inputmode="numeric" min="0" value="${value}"></div>`;
   }).join("");
+}
+
+function confirmPuttDistanceOrder() {
+  const distances = Array.from(document.querySelectorAll(".putt-distance-input")).map((input) => numberOrNull(input.value));
+  const first = distances[0];
+  const second = distances[1];
+  if (!Number.isFinite(first) || !Number.isFinite(second) || first >= second) return true;
+  return window.confirm("Putt 1 is shorter than Putt 2. Is that definitely correct?");
 }
 
 function handleChipChoice(choice) {
@@ -1873,7 +1903,7 @@ function renderApproachBucketTable(sourceRounds) {
 }
 
 function renderMissBreakdownTable(sourceRounds, field) {
-  const missKeys = ["hook", "left", "right", "slice", "top", "heavy", "short", "long"];
+  const missKeys = ["overDraw", "pull", "hook", "leftOther", "push", "overFade", "slice", "rightOther", "bigHeavy", "smallHeavy", "shortOther", "long"];
   const holes = sourceRounds.flatMap((round) => round.holes.map(normalizeHole));
   const rows = missKeys.map((key) => {
     const count = holes.filter((hole) => (field === "fairway" ? hole.fairwayMiss : hole.approachMiss) === key).length;
@@ -1890,15 +1920,19 @@ function renderMissBreakdownTable(sourceRounds, field) {
 }
 
 function buildMissTrendSeries(sourceRounds, field) {
-  const missKeys = ["hook", "left", "right", "slice", "top", "heavy", "short", "long"];
+  const missKeys = ["overDraw", "pull", "hook", "leftOther", "push", "overFade", "slice", "rightOther", "bigHeavy", "smallHeavy", "shortOther", "long"];
   const colors = {
     hook: "#041d4d",
-    left: "#38598b",
-    right: "#63d11f",
+    overDraw: "#38598b",
+    pull: "#5f7fb3",
+    leftOther: "#93a8ca",
+    push: "#63d11f",
+    overFade: "#89df57",
     slice: "#89df57",
-    top: "#8aa2d3",
-    heavy: "#d48f3f",
-    short: "#cc5a71",
+    rightOther: "#b6ec9d",
+    bigHeavy: "#d48f3f",
+    smallHeavy: "#e5ad69",
+    shortOther: "#cc5a71",
     long: "#6e6e8f"
   };
   return missKeys.map((key) => ({
@@ -2599,13 +2633,32 @@ function deriveShotState(hitValue, missValue) {
 
 function findPrimaryMiss(value) {
   if (!value) return null;
-  if (value === "hook" || value === "left") return "left";
-  if (value === "slice" || value === "right") return "right";
-  if (value === "heavy" || value === "top" || value === "short") return "short";
+  if (["overDraw", "pull", "hook", "left", "leftOther"].includes(value)) return "left";
+  if (["push", "overFade", "slice", "right", "rightOther"].includes(value)) return "right";
+  if (["bigHeavy", "smallHeavy", "heavy", "top", "short", "shortOther"].includes(value)) return "short";
   return "long";
 }
 
 function formatMissLabel(value) {
+  const labels = {
+    overDraw: "Over draw",
+    pull: "Pull",
+    hook: "Hook",
+    left: "Left",
+    leftOther: "Other",
+    push: "Push",
+    overFade: "Over fade",
+    slice: "Slice",
+    right: "Right",
+    rightOther: "Other",
+    bigHeavy: "Big heavy",
+    smallHeavy: "Small heavy",
+    heavy: "Heavy",
+    short: "Short",
+    shortOther: "Other",
+    long: "Long"
+  };
+  if (labels[value]) return labels[value];
   if (value === "top") return "topped";
   return capitalize(value);
 }
