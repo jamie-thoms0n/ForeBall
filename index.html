@@ -8,8 +8,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ForeBall">
     <title>ForeBall Golf Tracker</title>
-    <link rel="icon" type="image/png" href="logo-icon.png">
-    <link rel="apple-touch-icon" href="logo-icon.png">
+    <link rel="icon" type="image/png" href="logo-icon-192.png">
+    <link rel="apple-touch-icon" href="logo-icon-192.png">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
   </head>
@@ -56,6 +56,11 @@
           <div class="chart-panel">
             <h2>Handicap Index Trend</h2>
             <div class="chart-wrap"><canvas id="dashboardHandicapChart"></canvas></div>
+          </div>
+
+          <div class="chart-panel">
+            <h2>Children's Course Handicap Trend</h2>
+            <div class="chart-wrap"><canvas id="dashboardChildrensHandicapChart"></canvas></div>
           </div>
 
           <div class="panel">
@@ -129,6 +134,10 @@
             <select id="courseSelect">
               <option value="North Berwick Children's Course">North Berwick Children's Course</option>
             </select>
+            <div id="teeSelectWrap" class="hidden">
+              <label for="teeSelect">Tee</label>
+              <select id="teeSelect"></select>
+            </div>
             <div class="round-format-control" aria-label="Round length">
               <button class="round-format-button is-active" type="button" data-round-format="18">18 holes</button>
               <button class="round-format-button" type="button" data-round-format="front9">Front 9</button>
@@ -579,6 +588,6 @@
     </div>
 
     <script src="chart.local.js"></script>
-    <script src="app.js?v=20260624-round-exclusions"></script>
+    <script src="app.js?v=20260624-wind-fatigue-handicap-axis"></script>
   </body>
 </html>

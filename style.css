@@ -79,6 +79,7 @@ fieldset {
   min-height: 100vh;
   margin: 0 auto;
   padding: max(16px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -209,6 +210,11 @@ h2 {
   color: var(--text);
   padding: 10px;
   font-weight: 800;
+}
+
+.tab {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tab.is-active,
@@ -1195,6 +1201,30 @@ h2 {
   align-items: end;
 }
 
+.analytics-inline-filter {
+  width: min(240px, 100%);
+}
+
+.analytics-inline-filter label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.difficulty-ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.difficulty-ranking-grid h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
 .analytics-page-title {
   display: grid;
   gap: 4px;
@@ -1636,6 +1666,10 @@ canvas {
 }
 
 @media (max-width: 560px) {
+  .tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .toggle-grid,
   .stats-grid,
   .dashboard-recent-grid,
@@ -1648,6 +1682,7 @@ canvas {
   .profile-goal-grid,
   .wedge-entry-row,
   .followup-row,
+  .difficulty-ranking-grid,
   .approach-gir-row {
     grid-template-columns: 1fr;
   }

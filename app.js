@@ -11,7 +11,23 @@ const COURSES = [
     name: "North Berwick",
     pars: [4, 4, 4, 3, 4, 3, 4, 5, 5, 3, 5, 4, 4, 4, 3, 4, 4, 4],
     strokeIndexes: [9, 11, 1, 15, 5, 17, 3, 13, 7, 18, 2, 8, 12, 6, 14, 4, 10, 16],
-    lengths: [312, 414, 444, 168, 359, 139, 344, 487, 502, 153, 523, 363, 362, 359, 178, 360, 405, 268]
+    lengths: [312, 414, 444, 168, 359, 139, 344, 487, 502, 153, 523, 363, 362, 359, 178, 360, 405, 268],
+    tees: [
+      {
+        id: "blue",
+        label: "Blue",
+        courseRating: 71,
+        slopeRating: 127,
+        lengths: [312, 414, 444, 168, 359, 139, 344, 487, 502, 153, 523, 363, 362, 359, 178, 360, 405, 268]
+      },
+      {
+        id: "white",
+        label: "White",
+        courseRating: 74.6,
+        slopeRating: 128,
+        lengths: [322, 429, 476, 178, 371, 161, 365, 532, 519, 172, 546, 401, 387, 374, 190, 378, 428, 277]
+      }
+    ]
   },
   {
     name: "North Berwick Children's Course",
@@ -21,36 +37,54 @@ const COURSES = [
   },
   {
     name: "Gullane 1",
+    teeLabel: "Yellow",
+    courseRating: 70.4,
+    slopeRating: 122,
     pars: [4, 4, 5, 3, 4, 4, 4, 4, 3, 4, 4, 5, 3, 4, 5, 3, 4, 4],
     strokeIndexes: [14, 4, 8, 18, 1, 16, 10, 6, 12, 2, 7, 11, 15, 3, 9, 13, 5, 17],
     lengths: [287, 345, 479, 134, 436, 299, 398, 398, 141, 434, 427, 423, 160, 409, 487, 177, 390, 338]
   },
   {
     name: "Gullane 2",
+    teeLabel: "Yellow",
+    courseRating: 69.3,
+    slopeRating: 122,
     pars: [4, 4, 4, 4, 3, 5, 4, 4, 4, 4, 3, 4, 4, 4, 3, 5, 4, 4],
     strokeIndexes: [9, 7, 13, 1, 17, 5, 15, 3, 11, 6, 16, 10, 2, 12, 18, 4, 8, 14],
     lengths: [356, 326, 233, 425, 171, 498, 358, 352, 347, 340, 194, 376, 384, 336, 167, 471, 351, 291]
   },
   {
     name: "Gullane 3",
+    teeLabel: "Red",
+    courseRating: 63.7,
+    slopeRating: 109,
     pars: [4, 3, 4, 4, 4, 4, 4, 3, 4, 4, 3, 4, 3, 5, 3, 4, 4, 3],
     strokeIndexes: [3, 17, 5, 13, 7, 1, 11, 15, 9, 4, 18, 8, 14, 2, 12, 6, 10, 16],
     lengths: [341, 144, 293, 250, 314, 342, 311, 165, 327, 450, 135, 371, 186, 443, 176, 379, 328, 179]
   },
   {
     name: "Muirfield",
+    teeLabel: "Boxes",
+    courseRating: 72.5,
+    slopeRating: 139,
     pars: [4, 4, 4, 3, 5, 4, 3, 4, 5, 4, 4, 4, 3, 4, 4, 3, 5, 4],
     strokeIndexes: [5, 17, 11, 13, 7, 3, 15, 1, 9, 4, 18, 16, 14, 2, 8, 12, 10, 6],
     lengths: [446, 365, 377, 182, 510, 440, 147, 443, 505, 470, 354, 380, 156, 449, 394, 186, 506, 418]
   },
   {
     name: "Parklands Golf Club",
+    teeLabel: "Yellow",
+    courseRating: 68.3,
+    slopeRating: 130,
     pars: [4, 4, 4, 4, 4, 4, 5, 3, 5, 4, 5, 3, 4, 3, 4, 4, 4, 3],
     strokeIndexes: [13, 3, 17, 5, 9, 1, 15, 11, 7, 2, 14, 10, 16, 4, 18, 6, 12, 8],
     lengths: [300, 300, 281, 331, 354, 360, 467, 162, 504, 453, 498, 149, 364, 140, 287, 336, 338, 192]
   },
   {
     name: "Newcastle United Golf Club",
+    teeLabel: "Yellow",
+    courseRating: 70.7,
+    slopeRating: 124,
     pars: [4, 4, 4, 3, 4, 5, 3, 4, 5, 5, 4, 4, 5, 3, 3, 4, 4, 4],
     strokeIndexes: [8, 3, 17, 15, 14, 11, 16, 1, 4, 10, 13, 7, 12, 6, 18, 9, 5, 2],
     lengths: [383, 387, 347, 150, 349, 514, 156, 422, 546, 547, 342, 347, 497, 186, 118, 372, 352, 407]
@@ -65,7 +99,6 @@ const ROUND_FORMATS = {
 };
 
 const HANDICAP_PCC = 0;
-const DEFAULT_SLOPE_RATING = 113;
 const HANDICAP_ALLOWANCES = [
   { min: 20, count: 8, adjustment: 0 },
   { min: 19, count: 7, adjustment: 0 },
@@ -191,6 +224,7 @@ let editingCompletedRoundId = null;
 let analyticsRange = "lastX";
 let analyticsRoundCount = 20;
 let analyticsSection = "performanceOverview";
+let scoringDifficultyCourse = "all";
 let selectedRoundFormat = "18";
 let bagEditMode = false;
 let draftBag = [];
@@ -288,6 +322,8 @@ const el = {
   editBagBtn: document.getElementById("editBagBtn"),
   clubSelector: document.getElementById("clubSelector"),
   courseSelect: document.getElementById("courseSelect"),
+  teeSelectWrap: document.getElementById("teeSelectWrap"),
+  teeSelect: document.getElementById("teeSelect"),
   startPanel: document.getElementById("startPanel"),
   startRoundBtn: document.getElementById("startRoundBtn"),
   resumeRoundBtn: document.getElementById("resumeRoundBtn"),
@@ -393,6 +429,7 @@ function init() {
   saveMeta();
   populateCourses();
   populateAnalyticsRoundCounts();
+  seedLocalDemoRounds();
   renderProfile();
   bindEvents();
   updateResumeButton();
@@ -627,7 +664,7 @@ function renderProfileName() {
 function renderProfileSummary() {
   const current = displayCellValue(profile.currentHandicap);
   const goal = displayCellValue(profile.handicapGoal);
-  const date = profile.handicapGoalDate ? `, by ${profile.handicapGoalDate}` : "";
+  const date = profile.handicapGoalDate ? `, by ${formatDateShort(profile.handicapGoalDate)}` : "";
   el.profileHandicapSummary.textContent = `My current handicap is: ${current} and my goal is ${goal}${date}.`;
 }
 
@@ -838,9 +875,15 @@ function selectedCourse() {
   return COURSES.find((item) => item.name === el.courseSelect.value);
 }
 
+function selectedCourseTee(course = selectedCourse()) {
+  if (!course?.tees?.length) return null;
+  return course.tees.find((tee) => tee.id === el.teeSelect.value) || course.tees[0];
+}
+
 function updateRoundFormatOptions() {
   const course = selectedCourse();
   if (!course) return;
+  updateTeeOptions(course);
   const isNineHoleCourse = course.pars.length === 9;
   el.roundFormatButtons.forEach((button) => {
     const isFullRoundButton = button.dataset.roundFormat === "18";
@@ -848,6 +891,18 @@ function updateRoundFormatOptions() {
     if (isFullRoundButton) button.textContent = isNineHoleCourse ? "9 holes" : "18 holes";
   });
   if (isNineHoleCourse) setRoundFormat("18");
+}
+
+function updateTeeOptions(course = selectedCourse()) {
+  const tees = course?.tees || [];
+  el.teeSelectWrap.classList.toggle("hidden", tees.length < 2);
+  if (!tees.length) {
+    el.teeSelect.innerHTML = "";
+    return;
+  }
+  const previousValue = el.teeSelect.value;
+  el.teeSelect.innerHTML = tees.map((tee) => `<option value="${tee.id}">${tee.label}</option>`).join("");
+  el.teeSelect.value = tees.some((tee) => tee.id === previousValue) ? previousValue : tees[0].id;
 }
 
 function setRoundFormat(formatId) {
@@ -862,7 +917,7 @@ function startRound() {
   const course = selectedCourse();
   if (!course) return;
   editingCompletedRoundId = null;
-  activeRound = createRoundState(course, selectedRoundFormat);
+  activeRound = createRoundState(course, selectedRoundFormat, selectedCourseTee(course));
   currentHoleIndex = 0;
   persistActiveRound();
   showHole();
@@ -893,14 +948,17 @@ function goNextHole(event) {
   }
 }
 
-function createRoundState(course, formatId = "18") {
+function createRoundState(course, formatId = "18", tee = null) {
   const isNineHoleCourse = course.pars.length === 9;
   const format = isNineHoleCourse ? { label: "9 holes", start: 0, end: 9 } : getRoundFormat(formatId);
   const storedFormatId = isNineHoleCourse ? "course9" : formatId;
+  const teeLengths = tee?.lengths || course.lengths || [];
   return {
     id: `round_${Date.now()}`,
     date: new Date().toISOString().slice(0, 10),
     course: course.name,
+    teeId: tee?.id || "",
+    teeLabel: tee?.label || course.teeLabel || "",
     formatId: storedFormatId,
     formatLabel: format.label,
     excludeFromAnalysis: false,
@@ -913,7 +971,7 @@ function createRoundState(course, formatId = "18") {
         hole: courseHoleIndex + 1,
         par,
         strokeIndex: course.strokeIndexes?.[courseHoleIndex] ?? null,
-        length: course.lengths?.[courseHoleIndex] ?? null,
+        length: teeLengths?.[courseHoleIndex] ?? null,
         score: null,
         pickedUp: false,
         pickedUpManual: false,
@@ -940,6 +998,202 @@ function createRoundState(course, formatId = "18") {
       };
     })
   };
+}
+
+function seedLocalDemoRounds() {
+  if (!isLocalDemoHost()) return;
+  const demoRounds = buildLocalDemoRounds();
+  const existingIds = new Set(rounds.map((round) => round.id));
+  const missingRounds = demoRounds.filter((round) => !existingIds.has(round.id));
+  if (!missingRounds.length) return;
+  rounds = rounds.concat(missingRounds);
+  saveRounds();
+}
+
+function isLocalDemoHost() {
+  return ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+}
+
+function buildLocalDemoRounds() {
+  return [
+    buildDemoRound({
+      id: "demo_north_berwick_blue_2026_05_18",
+      date: "2026-05-18",
+      courseName: "North Berwick",
+      teeId: "blue",
+      weather: "sunny",
+      windSpeed: 12,
+      windDirection: "west",
+      scores: [4, 5, 5, 3, 4, 3, 5, 5, 6, 3, 6, 4, 4, 5, 3, 5, 4, 4],
+      fairways: [true, "push", "pull", true, "overFade", true, true, "slice", true, "pull", true, true, "hook", true],
+      gir: [true, false, false, true, true, true, false, true, false, true, false, true, true, false, true, false, true, true],
+      notes: "Demo round: steady scoring with a few right misses off the tee."
+    }),
+    buildDemoRound({
+      id: "demo_north_berwick_blue_2026_05_31",
+      date: "2026-05-31",
+      courseName: "North Berwick",
+      teeId: "blue",
+      weather: "cloudy",
+      windSpeed: 18,
+      windDirection: "south-west",
+      scores: [5, 4, 6, 3, 5, 4, 5, 6, 5, 3, 6, 5, 4, 5, 4, 5, 4, 3],
+      fairways: ["overFade", true, "slice", "pull", true, "push", "hook", true, true, "slice", "pull", true, "push", true],
+      gir: [false, true, false, true, false, false, false, false, true, true, false, false, true, false, false, false, true, true],
+      notes: "Demo round: windier day, more missed greens and one loose tee stretch."
+    }),
+    buildDemoRound({
+      id: "demo_north_berwick_blue_2026_06_12",
+      date: "2026-06-12",
+      courseName: "North Berwick",
+      teeId: "blue",
+      weather: "sunny",
+      windSpeed: 8,
+      windDirection: "east",
+      scores: [4, 4, 5, 3, 4, 3, 4, 5, 5, 3, 6, 4, 4, 5, 3, 5, 4, 4],
+      fairways: [true, true, "pull", true, true, true, true, "push", true, true, "overFade", true, true, true],
+      gir: [true, true, false, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true],
+      notes: "Demo round: cleaner ball striking and stronger GIR day."
+    }),
+    buildDemoRound({
+      id: "demo_muirfield_boxes_2026_06_05",
+      date: "2026-06-05",
+      courseName: "Muirfield",
+      weather: "showers",
+      windSpeed: 15,
+      windDirection: "north-west",
+      scores: [5, 4, 5, 3, 6, 5, 3, 5, 6, 5, 4, 5, 4, 5, 5, 3, 6, 4],
+      fairways: ["push", true, "pull", true, "slice", "overFade", true, "hook", "push", true, "pull", "slice", true, "overFade"],
+      gir: [false, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, false, true],
+      notes: "Demo round: tougher setup with several long approach misses."
+    }),
+    buildDemoRound({
+      id: "demo_gullane_1_yellow_2026_06_19",
+      date: "2026-06-19",
+      courseName: "Gullane 1",
+      weather: "cloudy",
+      windSpeed: 10,
+      windDirection: "south",
+      scores: [4, 5, 5, 3, 5, 4, 5, 4, 3, 5, 5, 6, 3, 5, 5, 3, 5, 5],
+      fairways: [true, "overFade", true, "pull", "push", true, "slice", true, "hook", "overFade", true, true, "pull", "push"],
+      gir: [true, false, true, true, false, false, false, true, true, false, false, false, true, false, true, true, false, false],
+      notes: "Demo round: solid par 5 play but approach distance control needs work."
+    })
+  ];
+}
+
+function buildDemoRound(config) {
+  const course = COURSES.find((item) => item.name === config.courseName);
+  const tee = course?.tees?.find((item) => item.id === config.teeId) || null;
+  const round = createRoundState(course, "18", tee);
+  const fairwayResults = config.fairways.slice();
+  const holes = round.holes.map((hole, index) => {
+    const fairwayResult = hole.par === 3 ? null : fairwayResults.shift();
+    return normalizeHole({
+      ...hole,
+      ...buildDemoHole(hole, index, config.scores[index], fairwayResult, config.gir[index])
+    });
+  });
+  return normalizeRound({
+    ...round,
+    id: config.id,
+    date: config.date,
+    context: normalizeRoundContext({
+      weather: config.weather,
+      windSpeed: config.windSpeed,
+      windDirection: config.windDirection,
+      food: [
+        { name: "Banana", holes: [6] },
+        { name: "Energy bar", holes: [12] }
+      ],
+      notes: config.notes
+    }),
+    holes
+  });
+}
+
+function buildDemoHole(hole, index, score, fairwayResult, gir) {
+  const teeClub = demoTeeClub(hole);
+  const approachClub = demoApproachClub(hole, teeClub);
+  const overPar = score - hole.par;
+  const approachMiss = gir ? null : demoApproachMiss(index);
+  const putts = demoPutts(overPar, gir, index);
+  const fairwayMiss = fairwayResult === true || fairwayResult === null ? null : fairwayResult;
+  const fairwayBunker = fairwayMiss && index % 5 === 1 ? 1 : null;
+  const greensideBunker = !gir && index % 6 === 2 ? 1 : null;
+  const penaltyType = overPar >= 2 && index % 2 === 0 ? "lostBall" : null;
+  return {
+    score,
+    pickedUp: false,
+    pickedUpManual: false,
+    teeClub,
+    fairway: hole.par === 3 ? null : fairwayResult === true,
+    fairwayMiss,
+    fairwayBunker,
+    fairwayBunkerEntryMode: fairwayBunker === null ? null : "preset",
+    gir,
+    approachHit: gir,
+    approachMiss,
+    approachClub,
+    approachDistance: demoApproachDistance(hole, teeClub),
+    chips: gir ? 0 : overPar >= 2 ? 2 : 1,
+    chipsEntryMode: "preset",
+    chipTypes: gir ? [] : [greensideBunker ? "regular" : index % 4 === 0 ? "bumpRun" : index % 3 === 0 ? "rough" : "regular"],
+    greensideBunker,
+    bunkerEntryMode: greensideBunker === null ? null : "preset",
+    penaltyType,
+    penaltyStrokes: penaltyType ? 1 : null,
+    puttsEntryMode: "preset",
+    putts,
+    puttDistances: demoPuttDistances(putts, index)
+  };
+}
+
+function demoTeeClub(hole) {
+  if (hole.par === 5) return "Driver";
+  if (hole.par === 4) {
+    if (hole.length >= 390) return "Driver";
+    if (hole.length >= 340) return "3 Wood";
+    return "4 Iron";
+  }
+  if (hole.length >= 185) return "5 Iron";
+  if (hole.length >= 165) return "6 Iron";
+  if (hole.length >= 145) return "8 Iron";
+  return "PW";
+}
+
+function demoApproachClub(hole, teeClub) {
+  if (hole.par === 3) return teeClub;
+  if (hole.par === 5) return hole.length >= 520 ? "8 Iron" : "PW";
+  if (hole.length >= 420) return "6 Iron";
+  if (hole.length >= 375) return "8 Iron";
+  if (hole.length >= 330) return "PW";
+  return "SW";
+}
+
+function demoApproachDistance(hole, teeClub) {
+  if (hole.par === 3) return hole.length;
+  if (hole.par === 5) return hole.length >= 520 ? 145 : 95;
+  const teeDistance = teeClub === "Driver" ? 255 : teeClub === "3 Wood" ? 230 : 205;
+  return Math.max(45, hole.length - teeDistance);
+}
+
+function demoApproachMiss(index) {
+  return ["smallHeavy", "push", "long", "pull", "bigHeavy", "overFade"][index % 6];
+}
+
+function demoPutts(overPar, gir, index) {
+  if (overPar < 0) return 1;
+  if (gir && overPar > 0) return 3;
+  if (!gir && overPar <= 0) return 1;
+  if (!gir && overPar >= 2 && index % 2 === 0) return 3;
+  return 2;
+}
+
+function demoPuttDistances(putts, index) {
+  if (putts <= 1) return [3 + index % 5];
+  if (putts === 2) return [14 + index * 2 % 28, 2 + index % 4];
+  return [28 + index * 3 % 18, 7 + index % 5, 2];
 }
 
 function showHole() {
@@ -1711,11 +1965,14 @@ function renderDashboard() {
   const activeRoundLabel = activeRound && !editingCompletedRoundId ? `${roundDisplayName(activeRound)} · Hole ${currentHole().hole}` : "None";
   const handicapLedger = calculateHandicapLedger(scoredRounds);
   const currentHandicap = handicapLedger.at(-1)?.handicapIndex ?? null;
+  const childrensHandicapLedger = calculateChildrensCourseHandicapLedger(scoredRounds);
+  const childrensHandicap = childrensHandicapLedger.at(-1)?.handicapIndex ?? null;
 
   el.dashboardStats.innerHTML = [
     ["Completed rounds", rounds.length],
     ["Scoring average", scoredRounds.length ? average(scoredRounds.map(adjustedRoundScore)).toFixed(1) : "0.0"],
     ["Handicap index", formatHandicapIndex(currentHandicap)],
+    ["Children's Course handicap", formatHandicapIndex(childrensHandicap)],
     ["Played last 7 days", recent7],
     ["Active round", activeRoundLabel]
   ]
@@ -1734,7 +1991,7 @@ function renderDashboard() {
   drawChart(
     "dashboardScoreChart",
     "line",
-    scoredRounds.map((round) => round.date),
+    scoredRounds.map((round) => formatDateShort(round.date)),
     scoredRounds.map(adjustedRoundScore),
     "Score"
   );
@@ -1742,9 +1999,19 @@ function renderDashboard() {
   drawChart(
     "dashboardHandicapChart",
     "line",
-    handicapLedger.map((item) => item.round.date),
+    handicapLedger.map((item) => formatDateShort(item.round.date)),
     handicapLedger.map((item) => item.handicapIndex),
-    "Handicap Index"
+    "Handicap Index",
+    { yBeginAtZero: true }
+  );
+
+  drawChart(
+    "dashboardChildrensHandicapChart",
+    "line",
+    childrensHandicapLedger.map((item) => formatDateShort(item.round.date)),
+    childrensHandicapLedger.map((item) => item.handicapIndex),
+    "Children's Handicap",
+    { yBeginAtZero: true }
   );
 }
 
@@ -1807,7 +2074,11 @@ function analysisEligibleRounds(sourceRounds = rounds) {
 }
 
 function handicapEligibleRounds(sourceRounds = rounds) {
-  return sourceRounds.filter((round) => !round.excludeFromHandicap);
+  return sourceRounds.filter((round) => !round.excludeFromHandicap && !isChildrensCourseRound(round));
+}
+
+function childrensCourseHandicapEligibleRounds(sourceRounds = rounds) {
+  return sourceRounds.filter((round) => !round.excludeFromHandicap && isChildrensCourseRound(round));
 }
 
 function buildRoundMetrics(round) {
@@ -1875,6 +2146,7 @@ function renderPerformanceOverview(filteredRounds, roundMetrics) {
   const doubleBogeyPlus = average(roundMetrics.map((item) => item.doubleBogeyPlus)).toFixed(1);
   const consistency = roundConsistencyStats(roundMetrics);
   const frontBack = frontBackSplitStats(filteredRounds);
+  const scoreCorrelations = buildCorrelationRows(roundMetrics).slice(0, 8);
 
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
@@ -1924,6 +2196,14 @@ function renderPerformanceOverview(filteredRounds, roundMetrics) {
         </div>
         ${renderFrontBackTable(frontBack)}
       </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Score Correlation Snapshot</h2>
+          <span class="analytics-note">Positive bars tend to increase score; negative bars tend to lower score</span>
+        </div>
+        <div class="chart-wrap"><canvas id="performanceCorrelationChart"></canvas></div>
+        ${renderCorrelationTable(scoreCorrelations)}
+      </div>
     </div>
   `;
 
@@ -1933,6 +2213,12 @@ function renderPerformanceOverview(filteredRounds, roundMetrics) {
     distribution.map((row) => row.label),
     distribution.map((row) => row.rounds),
     "Rounds"
+  );
+  drawBarChart(
+    "performanceCorrelationChart",
+    scoreCorrelations.map((row) => row.label),
+    scoreCorrelations.map((row) => Number(row.coeff.toFixed(3))),
+    "Correlation to score"
   );
 }
 
@@ -2239,6 +2525,9 @@ function renderApproachPlayAnalysis(filteredRounds) {
   const clubRows = approachClubRows(filteredRounds);
   const biasRows = approachMissBiasRows(filteredRounds);
   const costRows = approachCostRows(filteredRounds);
+  const distanceScoreRows = avgScoreVsParByCategory(filteredRounds, (hole) => approachDistanceCategory(hole.approachDistance));
+  const clubScoreRows = avgScoreVsParByCategory(filteredRounds, (hole) => hole.approachClub || null);
+  const missScoreRows = avgScoreVsParByCategory(filteredRounds, (hole) => hole.approachMiss ? formatMissLabel(hole.approachMiss) : hole.gir ? "GIR hit" : null);
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
       <div class="analytics-page-title">
@@ -2255,7 +2544,7 @@ function renderApproachPlayAnalysis(filteredRounds) {
       <div class="panel">
         <div class="analytics-section-header">
           <h2>Club Matrix</h2>
-          <span class="analytics-note">GIR, miss short rate, and scoring by approach club</span>
+          <span class="analytics-note">GIR, miss short/long rate, and scoring by approach club</span>
         </div>
         ${renderApproachClubMatrix(clubRows)}
       </div>
@@ -2268,20 +2557,47 @@ function renderApproachPlayAnalysis(filteredRounds) {
       </div>
       <div class="panel">
         <div class="analytics-section-header">
-          <h2>GIR By Lie</h2>
-          <span class="analytics-note">Requires adding approach lie to score entry</span>
-        </div>
-        <p class="analytics-note">Approach lie is not collected yet. Once added, this will compare fairway, rough, bunker, recovery, and tee-lie GIR rates.</p>
-      </div>
-      <div class="panel">
-        <div class="analytics-section-header">
           <h2>Approach Cost Matrix</h2>
           <span class="analytics-note">Average score by approach outcome</span>
         </div>
         ${renderApproachCostMatrix(costRows)}
       </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Approach Distance vs Score</h2>
+          <span class="analytics-note">Average score relative to par by approach distance bucket</span>
+        </div>
+        <div class="chart-wrap"><canvas id="approachDistanceCorrelationChart"></canvas></div>
+        ${renderCategoryScoreTable(distanceScoreRows, "Distance")}
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Approach Club vs Score</h2>
+          <span class="analytics-note">Which approach clubs are associated with higher or lower scoring</span>
+        </div>
+        <div class="chart-wrap"><canvas id="approachClubCorrelationChart"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Approach Miss Outcome vs Score</h2>
+          <span class="analytics-note">How approach misses and hits affect score</span>
+        </div>
+        <div class="chart-wrap"><canvas id="approachMissCorrelationChart"></canvas></div>
+      </div>
     </div>
   `;
+  drawBarChart("approachDistanceCorrelationChart", distanceScoreRows.map((row) => row.category), distanceScoreRows.map((row) => row.avgVsPar), "Avg vs par");
+  drawBarChart("approachClubCorrelationChart", clubScoreRows.map((row) => row.category), clubScoreRows.map((row) => row.avgVsPar), "Avg vs par");
+  drawBarChart("approachMissCorrelationChart", missScoreRows.map((row) => row.category), missScoreRows.map((row) => row.avgVsPar), "Avg vs par");
+}
+
+function approachDistanceCategory(distance) {
+  if (!Number.isFinite(distance)) return null;
+  if (distance < 50) return "0-50";
+  if (distance < 100) return "50-100";
+  if (distance < 150) return "100-150";
+  if (distance < 200) return "150-200";
+  return "200+";
 }
 
 function approachHoles(sourceRounds) {
@@ -2332,11 +2648,13 @@ function approachClubRows(sourceRounds) {
     const attempts = holes.length;
     const girHoles = holes.filter((hole) => hole.gir !== null);
     const missShort = holes.filter((hole) => findPrimaryMiss(hole.approachMiss) === "short").length;
+    const missLong = holes.filter((hole) => findPrimaryMiss(hole.approachMiss) === "long").length;
     return {
       club,
       attempts,
       gir: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
       missShort: pct(missShort, attempts),
+      missLong: pct(missLong, attempts),
       avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
     };
   }).sort((a, b) => b.attempts - a.attempts);
@@ -2347,8 +2665,8 @@ function renderApproachClubMatrix(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Club</th><th>Attempts</th><th>GIR</th><th>Miss Short</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.missShort}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Club</th><th>Attempts</th><th>GIR</th><th>Miss Short</th><th>Miss Long</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.missShort}%</td><td>${row.missLong}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2416,6 +2734,7 @@ function renderShortGameAnalysis(filteredRounds) {
   const missedGir = missedGirFinishStats(filteredRounds);
   const sand = sandSaveStats(filteredRounds);
   const recovery = missedFairwayRecoveryStats(filteredRounds);
+  const shortGameScoreRows = shortGameScoreFactorRows(filteredRounds);
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
       <div class="analytics-page-title">
@@ -2468,8 +2787,39 @@ function renderShortGameAnalysis(filteredRounds) {
         </div>
         ${renderRecoveryEfficiencyTable(recovery)}
       </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Short Game Factor vs Score</h2>
+          <span class="analytics-note">Average score relative to par when each recovery factor appears</span>
+        </div>
+        <div class="chart-wrap"><canvas id="shortGameCorrelationChart"></canvas></div>
+        ${renderCategoryScoreTable(shortGameScoreRows, "Factor")}
+      </div>
     </div>
   `;
+  drawBarChart("shortGameCorrelationChart", shortGameScoreRows.map((row) => row.category), shortGameScoreRows.map((row) => row.avgVsPar), "Avg vs par");
+}
+
+function shortGameScoreFactorRows(sourceRounds) {
+  const holes = allScoredHoles(sourceRounds);
+  const factors = [
+    { category: "Missed GIR", holes: holes.filter((hole) => hole.gir === false) },
+    { category: "Chip used", holes: holes.filter((hole) => (hole.chips || 0) > 0) },
+    { category: "Regular chip", holes: holes.filter((hole) => (hole.chipTypes || []).includes("regular")) },
+    { category: "Rough chip", holes: holes.filter((hole) => (hole.chipTypes || []).includes("rough")) },
+    { category: "Bump and run", holes: holes.filter((hole) => (hole.chipTypes || []).includes("bumpRun")) },
+    { category: "Greenside bunker", holes: holes.filter((hole) => (hole.greensideBunker || 0) > 0) },
+    { category: "Fairway bunker", holes: holes.filter((hole) => (hole.fairwayBunker || 0) > 0) }
+  ];
+  return factors
+    .map((item) => ({
+      category: item.category,
+      attempts: item.holes.length,
+      avgVsPar: roundToTenth(average(item.holes.map((hole) => hole.score - hole.par))) ?? 0,
+      avgScore: average(item.holes.map((hole) => hole.score)).toFixed(1)
+    }))
+    .filter((row) => row.attempts > 0)
+    .sort((a, b) => b.avgVsPar - a.avgVsPar);
 }
 
 function scramblingBreakdownRows(sourceRounds) {
@@ -2589,6 +2939,7 @@ function renderPuttingAnalysis(filteredRounds) {
   const expected = expectedPuttsStats(filteredRounds);
   const pressure = puttingPressureStats(filteredRounds);
   const scatter = firstPuttDistanceScorePoints(filteredRounds);
+  const outcomeRows = avgScoreVsParByCategory(filteredRounds, firstPuttOutcomeCategory);
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
       <div class="analytics-page-title">
@@ -2635,6 +2986,14 @@ function renderPuttingAnalysis(filteredRounds) {
         </div>
         <div class="chart-wrap"><canvas id="puttingDistanceScoreChart"></canvas></div>
       </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>First Putt Outcome vs Score</h2>
+          <span class="analytics-note">Outcome is inferred from putt count and second-putt leave distance</span>
+        </div>
+        <div class="chart-wrap"><canvas id="puttingOutcomeScoreChart"></canvas></div>
+        ${renderCategoryScoreTable(outcomeRows, "Outcome")}
+      </div>
       <div class="panel">
         <div class="analytics-section-header">
           <h2>Putting Pressure Metric</h2>
@@ -2651,6 +3010,18 @@ function renderPuttingAnalysis(filteredRounds) {
     </div>
   `;
   drawScatter("puttingDistanceScoreChart", scatter, "First putt distance", "Score");
+  drawBarChart("puttingOutcomeScoreChart", outcomeRows.map((row) => row.category), outcomeRows.map((row) => row.avgVsPar), "Avg vs par");
+}
+
+function firstPuttOutcomeCategory(hole) {
+  if (!hole.putts || !Array.isArray(hole.puttDistances) || !Number.isFinite(hole.puttDistances[0])) return null;
+  if (hole.putts === 1) return "Holed first putt";
+  const secondPutt = hole.puttDistances[1];
+  if (hole.putts >= 3) return "3-putt";
+  if (!Number.isFinite(secondPutt)) return "2-putt, leave unknown";
+  if (secondPutt <= 3) return "Left <=3ft";
+  if (secondPutt <= 6) return "Left 4-6ft";
+  return "Left 7ft+";
 }
 
 function puttingMakeRows(sourceRounds) {
@@ -2750,7 +3121,10 @@ function puttingHoles(sourceRounds) {
 
 function renderScoringAnalysis(filteredRounds) {
   const parRows = scoreByParRows(filteredRounds);
-  const difficultyRows = holeDifficultyRows(filteredRounds);
+  const difficultyRounds = scoringDifficultyCourse === "all"
+    ? filteredRounds
+    : filteredRounds.filter((round) => round.course === scoringDifficultyCourse);
+  const difficultyRows = holeDifficultyRows(difficultyRounds, scoringDifficultyCourse);
   const bogey = bogeyAvoidanceStats(filteredRounds);
   const blowUps = blowUpAnalysisRows(filteredRounds);
   const afterBad = scoringAfterBadHoleStats(filteredRounds);
@@ -2765,8 +3139,17 @@ function renderScoringAnalysis(filteredRounds) {
         ${renderSimpleTable(["Par", "Avg"], parRows.map((row) => [row.par, row.avg]))}
       </div>
       <div class="panel">
-        <div class="analytics-section-header"><h2>Hole Difficulty Ranking</h2><span class="analytics-note">Across all played courses</span></div>
-        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], difficultyRows.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+        <div class="analytics-section-header">
+          <h2>Hole Difficulty Ranking</h2>
+          <div class="analytics-inline-filter">
+            <label for="scoringDifficultyCourseSelect">Course</label>
+            <select id="scoringDifficultyCourseSelect">
+              ${renderScoringCourseOptions()}
+            </select>
+          </div>
+        </div>
+        <p class="analytics-note">Shows the top 3 hardest and bottom 3 easiest holes for the selected course set.</p>
+        ${renderHoleDifficultyRanking(difficultyRows)}
       </div>
       <div class="panel">
         <div class="analytics-section-header"><h2>Bogey Avoidance</h2><span class="analytics-note">Distribution of scoring outcomes</span></div>
@@ -2774,7 +3157,8 @@ function renderScoringAnalysis(filteredRounds) {
           ${renderStatCards([
             ["Pars or better", `${bogey.parOrBetter}%`],
             ["Bogeys", `${bogey.bogey}%`],
-            ["Double+", `${bogey.doublePlus}%`]
+            ["Doubles", `${bogey.double}%`],
+            ["Triple or worse", `${bogey.tripleWorse}%`]
           ])}
         </div>
       </div>
@@ -2793,6 +3177,13 @@ function renderScoringAnalysis(filteredRounds) {
       </div>
     </div>
   `;
+  const scoringCourseSelect = document.getElementById("scoringDifficultyCourseSelect");
+  if (scoringCourseSelect) {
+    scoringCourseSelect.addEventListener("change", () => {
+      scoringDifficultyCourse = scoringCourseSelect.value;
+      renderScoringAnalysis(filteredRounds);
+    });
+  }
 }
 
 function scoreByParRows(sourceRounds) {
@@ -2802,12 +3193,12 @@ function scoreByParRows(sourceRounds) {
   });
 }
 
-function holeDifficultyRows(sourceRounds) {
+function holeDifficultyRows(sourceRounds, courseFilter = "all") {
   const groups = new Map();
   sourceRounds.forEach((round) => {
     round.holes.map(normalizeHole).forEach((hole) => {
       if (hole.score === null) return;
-      const key = `${round.course} #${hole.hole}`;
+      const key = courseFilter === "all" ? `${round.course} #${hole.hole}` : `Hole ${hole.hole}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(hole);
     });
@@ -2820,12 +3211,38 @@ function holeDifficultyRows(sourceRounds) {
   })).sort((a, b) => Number(b.avgVsPar) - Number(a.avgVsPar));
 }
 
+function renderScoringCourseOptions() {
+  const options = [{ value: "all", label: "All courses combined" }].concat(COURSES.map((course) => ({ value: course.name, label: course.name })));
+  return options
+    .map((option) => `<option value="${escapeAttr(option.value)}" ${scoringDifficultyCourse === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
+    .join("");
+}
+
+function renderHoleDifficultyRanking(rows) {
+  if (!rows.length) return `<p class="analytics-note">No scored holes for this course yet.</p>`;
+  const hardest = rows.slice(0, 3);
+  const easiest = rows.slice().reverse().slice(0, 3);
+  return `
+    <div class="difficulty-ranking-grid">
+      <div>
+        <h3>Top 3 hardest</h3>
+        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], hardest.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+      </div>
+      <div>
+        <h3>Bottom 3 easiest</h3>
+        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], easiest.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+      </div>
+    </div>
+  `;
+}
+
 function bogeyAvoidanceStats(sourceRounds) {
   const holes = allScoredHoles(sourceRounds);
   return {
     parOrBetter: pct(holes.filter((hole) => hole.score <= hole.par).length, holes.length),
     bogey: pct(holes.filter((hole) => hole.score - hole.par === 1).length, holes.length),
-    doublePlus: pct(holes.filter((hole) => hole.score - hole.par >= 2).length, holes.length)
+    double: pct(holes.filter((hole) => hole.score - hole.par === 2).length, holes.length),
+    tripleWorse: pct(holes.filter((hole) => hole.score - hole.par >= 3).length, holes.length)
   };
 }
 
@@ -2880,6 +3297,8 @@ function scoringAfterBadHoleStats(sourceRounds) {
 
 function renderSituationalAnalysis(filteredRounds) {
   const frontBack = frontBackSplitStats(filteredRounds);
+  const wind = windCorrelationStats(filteredRounds);
+  const windDirectionRows = windDirectionScoreRows(filteredRounds);
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
       <div class="analytics-page-title">
@@ -2889,6 +3308,23 @@ function renderSituationalAnalysis(filteredRounds) {
       <div class="panel">
         <div class="analytics-section-header"><h2>Performance In Wind</h2><span class="analytics-note">Average adjusted score by wind speed bucket</span></div>
         ${renderSimpleTable(["Wind", "Rounds", "Score"], windSpeedBucketRows(filteredRounds).map((row) => [row.wind, row.rounds, row.score]))}
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header"><h2>Wind Strength Correlation</h2><span class="analytics-note">How wind speed relates to score</span></div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Sample", wind.sample],
+            ["Correlation", wind.coeff],
+            ["Read", wind.read],
+            ["Avg wind", wind.avgWind]
+          ])}
+        </div>
+        <div class="chart-wrap"><canvas id="windStrengthScoreChart"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average adjusted score by wind direction</span></div>
+        <div class="chart-wrap"><canvas id="windDirectionScoreChart"></canvas></div>
+        ${renderSimpleTable(["Direction", "Rounds", "Avg score"], windDirectionRows.map((row) => [row.direction, row.rounds, row.avgScore]))}
       </div>
       <div class="panel">
         <div class="analytics-section-header"><h2>Weather Impact</h2><span class="analytics-note">Average adjusted score by weather</span></div>
@@ -2904,6 +3340,33 @@ function renderSituationalAnalysis(filteredRounds) {
       </div>
     </div>
   `;
+  drawScatter("windStrengthScoreChart", wind.points, "Wind speed", "Score");
+  drawBarChart("windDirectionScoreChart", windDirectionRows.map((row) => row.direction), windDirectionRows.map((row) => Number(row.avgScore)), "Avg score");
+}
+
+function windCorrelationStats(sourceRounds) {
+  const points = sourceRounds
+    .map((round) => {
+      const windSpeed = normalizeRoundContext(round.context).windSpeed;
+      return Number.isFinite(windSpeed) && hasRoundScore(round) ? { x: windSpeed, y: adjustedRoundScore(round) } : null;
+    })
+    .filter(Boolean);
+  const coeff = correl(points.map((point) => point.x), points.map((point) => point.y));
+  return {
+    points,
+    sample: points.length,
+    coeff: points.length >= 3 ? coeff.toFixed(2) : "Need 3",
+    read: points.length >= 3 ? correlationStrength(coeff) : "Not enough data",
+    avgWind: points.length ? `${average(points.map((point) => point.x)).toFixed(1)} mph` : "—"
+  };
+}
+
+function windDirectionScoreRows(sourceRounds) {
+  return groupRoundsByContext(sourceRounds, "windDirection").map((row) => ({
+    direction: row.label,
+    rounds: row.rounds,
+    avgScore: row.avgScore
+  }));
 }
 
 function windSpeedBucketRows(sourceRounds) {
@@ -2963,7 +3426,7 @@ function renderExpandedTrends(filteredRounds, roundMetrics) {
   const rollingBirdies = rollingAverage(filteredRounds.map(birdieCount), 5);
   const rollingConsistency = rollingConsistencySeries(roundMetrics.map((item) => item.score), 5);
   const recentDelta = compareRecentVsPrevious(roundMetrics);
-  const labels = filteredRounds.map((round) => round.date);
+  const labels = roundDateLabels(filteredRounds);
   el.analyticsContent.innerHTML = `
     <div class="analytics-stack">
       <div class="analytics-page-title">
@@ -2994,7 +3457,7 @@ function renderExpandedTrends(filteredRounds, roundMetrics) {
     { label: "FIR %", data: rollingFir, color: "#041d4d" },
     { label: "Putts", data: rollingPutts, color: "#8aa2d3" }
   ], "Rolling");
-  drawMultiLineChart("analyticsTrendHandicap", labels, [{ label: "Handicap", data: rollingHandicap, color: "#041d4d" }], "Index");
+  drawMultiLineChart("analyticsTrendHandicap", labels, [{ label: "Handicap", data: rollingHandicap, color: "#041d4d" }], "Index", { yBeginAtZero: true });
   drawMultiLineChart("analyticsTrendMistakes", labels, [
     { label: "Double bogey+", data: rollingDoubleBogeys, color: "#d48f3f" },
     { label: "Penalties", data: rollingPenalties, color: "#c24c4c" }
@@ -3215,10 +3678,17 @@ function frontBackSplitStats(sourceRounds) {
 function splitMetrics(holes) {
   const girHoles = holes.filter((hole) => hole.gir !== null);
   const puttHoles = holes.filter((hole) => hole.putts !== null);
+  const fairwayHoles = holes.filter((hole) => hole.fairway !== null);
+  const missedFairways = fairwayHoles.filter((hole) => hole.fairway === false);
+  const approachMisses = holes.filter((hole) => hole.approachHit === false || hole.approachMiss);
   return {
     score: sum(holes.map((hole) => hole.score)),
     girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
-    putts: sum(puttHoles.map((hole) => hole.putts))
+    putts: sum(puttHoles.map((hole) => hole.putts)),
+    fairwaysMade: fairwayHoles.filter((hole) => hole.fairway).length,
+    fairwaysMissed: missedFairways.length,
+    fairwayMissShortPct: pct(missedFairways.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "short").length, missedFairways.length),
+    approachMissShortPct: pct(approachMisses.filter((hole) => findPrimaryMiss(hole.approachMiss) === "short").length, approachMisses.length)
   };
 }
 
@@ -3226,7 +3696,11 @@ function summarizeSplitRows(rows) {
   return {
     score: rows.length ? average(rows.map((row) => row.score)).toFixed(1) : "—",
     girPct: rows.length ? `${Math.round(average(rows.map((row) => row.girPct)))}%` : "—",
-    putts: rows.length ? average(rows.map((row) => row.putts)).toFixed(1) : "—"
+    putts: rows.length ? average(rows.map((row) => row.putts)).toFixed(1) : "—",
+    fairwaysMade: rows.length ? average(rows.map((row) => row.fairwaysMade)).toFixed(1) : "—",
+    fairwaysMissed: rows.length ? average(rows.map((row) => row.fairwaysMissed)).toFixed(1) : "—",
+    fairwayMissShortPct: rows.length ? `${Math.round(average(rows.map((row) => row.fairwayMissShortPct)))}%` : "—",
+    approachMissShortPct: rows.length ? `${Math.round(average(rows.map((row) => row.approachMissShortPct)))}%` : "—"
   };
 }
 
@@ -3239,6 +3713,10 @@ function renderFrontBackTable(frontBack) {
           <tr><td>Score</td><td>${frontBack.front.score}</td><td>${frontBack.back.score}</td></tr>
           <tr><td>GIR</td><td>${frontBack.front.girPct}</td><td>${frontBack.back.girPct}</td></tr>
           <tr><td>Putts</td><td>${frontBack.front.putts}</td><td>${frontBack.back.putts}</td></tr>
+          <tr><td>Fairways made</td><td>${frontBack.front.fairwaysMade}</td><td>${frontBack.back.fairwaysMade}</td></tr>
+          <tr><td>Fairways missed</td><td>${frontBack.front.fairwaysMissed}</td><td>${frontBack.back.fairwaysMissed}</td></tr>
+          <tr><td>Fairway misses short</td><td>${frontBack.front.fairwayMissShortPct}</td><td>${frontBack.back.fairwayMissShortPct}</td></tr>
+          <tr><td>Approach misses short</td><td>${frontBack.front.approachMissShortPct}</td><td>${frontBack.back.approachMissShortPct}</td></tr>
         </tbody>
       </table>
     </div>
@@ -3273,8 +3751,8 @@ function renderAnalyticsOverview(filteredRounds, roundMetrics) {
       <div class="panel"><div class="analytics-section-header"><h2>Approach Distance Buckets</h2><span class="analytics-note">How scoring and hit rate change by yardage</span></div>${renderApproachBucketTable(filteredRounds)}</div>
     </div>
   `;
-  drawChart("analyticsOverviewScoreChart", "line", filteredRounds.map((round) => round.date), roundMetrics.map((item) => item.score), "Score");
-  drawMultiLineChart("analyticsOverviewCoreChart", filteredRounds.map((round) => round.date), [
+  drawChart("analyticsOverviewScoreChart", "line", roundDateLabels(filteredRounds), roundMetrics.map((item) => item.score), "Score");
+  drawMultiLineChart("analyticsOverviewCoreChart", roundDateLabels(filteredRounds), [
     { label: "FIR %", data: roundMetrics.map((item) => item.firPct), color: "#041d4d" },
     { label: "GIR %", data: roundMetrics.map((item) => item.girPct), color: "#63d11f" },
     { label: "Approach Hit %", data: roundMetrics.map((item) => item.approachHitPct), color: "#8aa2d3" }
@@ -3316,13 +3794,13 @@ function renderAnalyticsBallStriking(filteredRounds, roundMetrics) {
       <div class="panel"><div class="analytics-section-header"><h2>Approach Miss Pattern</h2><span class="analytics-note">Where approach shots are missing</span></div>${renderMissBreakdownTable(filteredRounds, "approach")}</div>
     </div>
   `;
-  drawMultiLineChart("analyticsBallStrikingTrend", filteredRounds.map((round) => round.date), [
+  drawMultiLineChart("analyticsBallStrikingTrend", roundDateLabels(filteredRounds), [
     { label: "FIR %", data: roundMetrics.map((item) => item.firPct), color: "#041d4d" },
     { label: "GIR %", data: roundMetrics.map((item) => item.girPct), color: "#63d11f" },
     { label: "Approach Hit %", data: roundMetrics.map((item) => item.approachHitPct), color: "#8aa2d3" }
   ], "%");
-  drawMultiLineChart("analyticsFairwayMissTrend", filteredRounds.map((round) => round.date), fairwayMissSeries, "Misses");
-  drawMultiLineChart("analyticsApproachMissTrend", filteredRounds.map((round) => round.date), approachMissSeries, "Misses");
+  drawMultiLineChart("analyticsFairwayMissTrend", roundDateLabels(filteredRounds), fairwayMissSeries, "Misses");
+  drawMultiLineChart("analyticsApproachMissTrend", roundDateLabels(filteredRounds), approachMissSeries, "Misses");
 }
 
 function renderAnalyticsShortGame(filteredRounds, roundMetrics) {
@@ -3343,7 +3821,7 @@ function renderAnalyticsShortGame(filteredRounds, roundMetrics) {
       <div class="panel"><div class="analytics-section-header"><h2>Recovery on Missed GIR</h2><span class="analytics-note">How you score when the green is missed</span></div>${renderRecoveryTable(filteredRounds)}</div>
     </div>
   `;
-  drawMultiLineChart("analyticsShortGameTrend", filteredRounds.map((round) => round.date), [
+  drawMultiLineChart("analyticsShortGameTrend", roundDateLabels(filteredRounds), [
     { label: "Chips", data: roundMetrics.map((item) => item.chipsTotal), color: "#041d4d" },
     { label: "Fairway bunker", data: roundMetrics.map((item) => item.fairwayBunkerTotal), color: "#63d11f" },
     { label: "Greenside bunker", data: roundMetrics.map((item) => item.bunkerTotal), color: "#8aa2d3" },
@@ -3374,7 +3852,7 @@ function renderAnalyticsPutting(filteredRounds, roundMetrics) {
       <div class="panel"><div class="analytics-section-header"><h2>First-Putt Distance Buckets</h2><span class="analytics-note">Expected putts by opening putt distance</span></div>${renderPuttBucketTable(puttBuckets)}</div>
     </div>
   `;
-  drawMultiLineChart("analyticsPuttingTrend", filteredRounds.map((round) => round.date), [
+  drawMultiLineChart("analyticsPuttingTrend", roundDateLabels(filteredRounds), [
     { label: "Total Putts", data: roundMetrics.map((item) => item.puttsTotal), color: "#041d4d" },
     { label: "Putts > 6ft", data: roundMetrics.map((item) => item.puttsOver6), color: "#63d11f" },
     { label: "Putts <= 6ft", data: roundMetrics.map((item) => item.puttsUnder6), color: "#8aa2d3" }
@@ -3423,10 +3901,10 @@ function renderAnalyticsTrends(filteredRounds, roundMetrics) {
       <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Skill Trends</h2><span class="analytics-note">5-round rolling GIR, FIR, and putts</span></div><div class="chart-wrap"><canvas id="analyticsTrendSkills"></canvas></div></div>
     </div>
   `;
-  drawMultiLineChart("analyticsTrendScore", filteredRounds.map((round) => round.date), [
+  drawMultiLineChart("analyticsTrendScore", roundDateLabels(filteredRounds), [
     { label: "Score", data: rollingScore, color: "#041d4d" }
   ], "Score");
-  drawMultiLineChart("analyticsTrendSkills", filteredRounds.map((round) => round.date), [
+  drawMultiLineChart("analyticsTrendSkills", roundDateLabels(filteredRounds), [
     { label: "GIR %", data: rollingGir, color: "#63d11f" },
     { label: "FIR %", data: rollingFir, color: "#041d4d" },
     { label: "Putts", data: rollingPutts, color: "#8aa2d3" }
@@ -3474,7 +3952,7 @@ function renderRounds() {
         <header>
           <div>
             <h2>${roundDisplayName(round)}</h2>
-            <p>${round.date}</p>
+            <p>${formatDateShort(round.date)}</p>
           </div>
           <strong>${formatRelative(totalScore(round), totalPar(round))}</strong>
         </header>
@@ -3540,7 +4018,7 @@ function openRoundDetail(roundId) {
   el.roundDetailSection.classList.remove("hidden");
   el.roundStatsSection.classList.add("hidden");
   el.roundDetailTitle.textContent = roundDisplayName(round);
-  el.roundDetailMeta.textContent = `${round.date} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
+  el.roundDetailMeta.textContent = `${formatDateShort(round.date)} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
   el.roundDetailTotal.textContent = totalScore(round);
   el.roundDetailRelative.textContent = formatRelative(totalScore(round), totalPar(round));
   el.roundDetailParTotal.textContent = `Par ${totalPar(round)}`;
@@ -3585,7 +4063,7 @@ function openRoundStats(roundId) {
   el.roundDetailSection.classList.add("hidden");
   el.roundStatsSection.classList.remove("hidden");
   el.roundStatsTitle.textContent = `${roundDisplayName(round)} Stats`;
-  el.roundStatsMeta.textContent = `${round.date} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
+  el.roundStatsMeta.textContent = `${formatDateShort(round.date)} · Score differential ${formatDifferential(handicap.differential)} · PCC ${handicap.pcc}`;
   el.roundStatsGross.textContent = totalScore(round);
   el.roundStatsRelative.textContent = formatRelative(totalScore(round), totalPar(round));
   el.roundStatsGrid.innerHTML = [
@@ -3635,7 +4113,7 @@ function closeRoundStats() {
   renderRounds();
 }
 
-function drawChart(id, type, labels, data, label) {
+function drawChart(id, type, labels, data, label, options = {}) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(document.getElementById(id), {
     type,
@@ -3649,7 +4127,13 @@ function drawChart(id, type, labels, data, label) {
         tension: 0.25
       }]
     },
-    options: chartOptions()
+    options: {
+      ...chartOptions(),
+      scales: {
+        x: axisOptions(""),
+        y: axisOptions(label, options)
+      }
+    }
   });
 }
 
@@ -3676,7 +4160,7 @@ function drawScatter(id, data, xLabel, yLabel) {
   });
 }
 
-function drawMultiLineChart(id, labels, datasets, yLabel) {
+function drawMultiLineChart(id, labels, datasets, yLabel, options = {}) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(document.getElementById(id), {
     type: "line",
@@ -3695,7 +4179,7 @@ function drawMultiLineChart(id, labels, datasets, yLabel) {
       ...chartOptions(),
       scales: {
         x: axisOptions(""),
-        y: axisOptions(yLabel)
+        y: axisOptions(yLabel, options)
       }
     }
   });
@@ -3763,6 +4247,10 @@ function renderStatCards(items) {
 function filterLabel() {
   if (analyticsRange === "lastX") return `Last ${analyticsRoundCount} rounds`;
   return el.analyticsRangeSelect.options[el.analyticsRangeSelect.selectedIndex]?.text || "";
+}
+
+function roundDateLabels(sourceRounds) {
+  return sourceRounds.map((round) => formatDateShort(round.date));
 }
 
 function sum(values) {
@@ -4106,6 +4594,30 @@ function allScoredHoles(sourceRounds) {
   return sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.score !== null);
 }
 
+function avgScoreVsParByCategory(sourceRounds, getCategory, minAttempts = 1) {
+  const groups = new Map();
+  allScoredHoles(sourceRounds).forEach((hole) => {
+    const category = getCategory(hole);
+    if (!category) return;
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(hole);
+  });
+  return Array.from(groups.entries())
+    .map(([category, holes]) => ({
+      category,
+      attempts: holes.length,
+      avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0,
+      avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
+    }))
+    .filter((row) => row.attempts >= minAttempts)
+    .sort((a, b) => b.avgVsPar - a.avgVsPar);
+}
+
+function renderCategoryScoreTable(rows, label = "Factor") {
+  if (!rows.length) return `<p class="analytics-note">Not enough data yet.</p>`;
+  return renderSimpleTable([label, "Attempts", "Avg score", "Avg vs par"], rows.map((row) => [row.category, row.attempts, row.avgScore, signedNumber(row.avgVsPar)]));
+}
+
 function signedNumber(value) {
   if (!Number.isFinite(value)) return "0.0";
   const rounded = roundToTenth(value);
@@ -4160,12 +4672,14 @@ function chartOptions() {
   };
 }
 
-function axisOptions(title) {
-  return {
+function axisOptions(title, options = {}) {
+  const axis = {
     title: { display: Boolean(title), text: title, color: "#041d4d" },
     ticks: { color: "#041d4d" },
     grid: { color: "#dce4f3" }
   };
+  if (options.yBeginAtZero || options.beginAtZero) axis.beginAtZero = true;
+  return axis;
 }
 
 function exportJson() {
@@ -4231,6 +4745,7 @@ function buildRoundsCsv(sourceRounds) {
     "roundId",
     "date",
     "course",
+    "tee",
     "round_format",
     "excluded_from_analysis",
     "excluded_from_handicap",
@@ -4271,8 +4786,9 @@ function buildRoundsCsv(sourceRounds) {
       const handicap = calculateScoreDifferential(round);
       return [
       round.id,
-      round.date,
+      formatDateShort(round.date),
       round.course,
+      round.teeLabel,
       round.formatLabel,
       Boolean(round.excludeFromAnalysis),
       Boolean(round.excludeFromHandicap),
@@ -4317,7 +4833,8 @@ function formatRoundText(round) {
   const handicap = calculateScoreDifferential(round);
   const lines = [
     `Course: ${roundDisplayName(round)}`,
-    `Date: ${round.date}`,
+    `Date: ${formatDateShort(round.date)}`,
+    `Tee: ${round.teeLabel || "-"}`,
     `Score: ${totalScore(round)} (${formatRelative(totalScore(round), totalPar(round))})`,
     `Par: ${totalPar(round)}`,
     `Excluded from analysis: ${round.excludeFromAnalysis ? "Yes" : "No"}`,
@@ -4485,6 +5002,13 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function formatDateShort(value) {
+  if (!value) return "";
+  const [year, month, day] = String(value).slice(0, 10).split("-");
+  if (!year || !month || !day) return String(value);
+  return `${day}-${month}-${year.slice(-2)}`;
+}
+
 function limitNumberOrNull(value, max) {
   const parsed = numberOrNull(value);
   if (parsed === null) return null;
@@ -4582,7 +5106,7 @@ function countRoundsSince(days) {
 function mostRecentRoundLabel() {
   if (!rounds.length) return "No rounds";
   const recent = rounds.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-  return `${roundDisplayName(recent)} · ${recent.date}`;
+  return `${roundDisplayName(recent)} · ${formatDateShort(recent.date)}`;
 }
 
 function bestScoreLabel() {
@@ -4608,23 +5132,34 @@ function inferRoundFormat(round) {
 function roundDisplayName(round) {
   const formatId = inferRoundFormat(round);
   const format = getRoundFormat(formatId);
-  return formatId === "18" ? round.course : `${round.course} · ${format.label}`;
+  const tee = round.teeLabel ? ` · ${round.teeLabel}` : "";
+  return formatId === "18" ? `${round.course}${tee}` : `${round.course}${tee} · ${format.label}`;
 }
 
 function calculateScoreDifferential(round) {
+  const scale = roundEighteenHoleScale(round);
+  const adjustedGrossScore = hasRoundScore(round) ? totalScore(round) * scale : null;
   if (!hasRoundScore(round)) {
     return {
       differential: null,
-      adjustedGrossScore: null,
+      adjustedGrossScore,
       courseRating: null,
       slopeRating: null,
       pcc: HANDICAP_PCC
     };
   }
-  const scale = roundEighteenHoleScale(round);
-  const adjustedGrossScore = totalScore(round) * scale;
-  const courseRating = courseRatingForRound(round) * scale;
+  const baseCourseRating = courseRatingForRound(round);
   const slopeRating = slopeRatingForRound(round);
+  if (!Number.isFinite(baseCourseRating) || !Number.isFinite(slopeRating)) {
+    return {
+      differential: null,
+      adjustedGrossScore,
+      courseRating: baseCourseRating,
+      slopeRating,
+      pcc: HANDICAP_PCC
+    };
+  }
+  const courseRating = baseCourseRating * scale;
   const differential = roundToTenth((adjustedGrossScore - courseRating - HANDICAP_PCC) * (113 / slopeRating));
   return {
     differential,
@@ -4658,6 +5193,31 @@ function calculateHandicapLedger(sourceRounds = rounds) {
   });
 }
 
+function calculateChildrensCourseHandicapLedger(sourceRounds = rounds) {
+  const scored = childrensCourseHandicapEligibleRounds(sourceRounds)
+    .filter(hasRoundScore)
+    .map((round, index) => ({ round, index, differential: childrensCourseDifferential(round) }))
+    .filter((item) => item.differential !== null)
+    .sort((a, b) => {
+      const dateDiff = new Date(a.round.date) - new Date(b.round.date);
+      return dateDiff || a.index - b.index;
+    });
+
+  return scored.map((item, index) => {
+    const recent = scored.slice(Math.max(0, index - 19), index + 1);
+    return {
+      round: item.round,
+      differential: item.differential,
+      handicapIndex: handicapIndexFromDifferentials(recent.map((entry) => entry.differential))
+    };
+  });
+}
+
+function childrensCourseDifferential(round) {
+  if (!hasRoundScore(round)) return null;
+  return roundToTenth(totalScore(round) - totalPar(round));
+}
+
 function handicapIndexFromDifferentials(differentials) {
   const allowance = handicapAllowanceForCount(differentials.length);
   if (!allowance) return null;
@@ -4683,20 +5243,32 @@ function currentCountingRoundIds(sourceRounds = rounds) {
   return current?.countingRoundIds || new Set();
 }
 
+function isChildrensCourseRound(round) {
+  return round.course === "North Berwick Children's Course";
+}
+
 function courseRatingForRound(round) {
   const course = COURSES.find((item) => item.name === round.course);
-  const total = totalPar(round);
+  const tee = teeForRound(round, course);
   const formatId = inferRoundFormat(round);
-  if (!course) return total;
-  if (formatId === "front9") return course.courseRatingFront9 ?? course.courseRating9 ?? total;
-  if (formatId === "back9") return course.courseRatingBack9 ?? course.courseRating9 ?? total;
-  if (formatId === "course9") return course.courseRating9 ?? course.courseRating ?? total;
-  return course.courseRating ?? total;
+  if (!course) return null;
+  if (formatId === "front9") return tee?.courseRatingFront9 ?? course.courseRatingFront9 ?? tee?.courseRating9 ?? course.courseRating9 ?? null;
+  if (formatId === "back9") return tee?.courseRatingBack9 ?? course.courseRatingBack9 ?? tee?.courseRating9 ?? course.courseRating9 ?? null;
+  if (formatId === "course9") return tee?.courseRating9 ?? course.courseRating9 ?? tee?.courseRating ?? course.courseRating ?? null;
+  return tee?.courseRating ?? course.courseRating ?? null;
 }
 
 function slopeRatingForRound(round) {
   const course = COURSES.find((item) => item.name === round.course);
-  return course?.slopeRating || DEFAULT_SLOPE_RATING;
+  const tee = teeForRound(round, course);
+  return tee?.slopeRating ?? course?.slopeRating ?? null;
+}
+
+function teeForRound(round, course = COURSES.find((item) => item.name === round.course)) {
+  if (!course?.tees?.length) return null;
+  if (round.teeId) return course.tees.find((tee) => tee.id === round.teeId) || null;
+  if (round.teeLabel) return course.tees.find((tee) => tee.label === round.teeLabel) || null;
+  return null;
 }
 
 function roundToTenth(value) {
@@ -4786,10 +5358,14 @@ function registerServiceWorker() {
 
 function normalizeRound(round) {
   const formatId = inferRoundFormat(round);
+  const course = COURSES.find((item) => item.name === round.course);
+  const tee = teeForRound(round, course) || (!round.teeId && !round.teeLabel ? course?.tees?.[0] : null);
   return {
     ...round,
     formatId,
     formatLabel: getRoundFormat(formatId).label,
+    teeId: round.teeId || tee?.id || "",
+    teeLabel: round.teeLabel || tee?.label || course?.teeLabel || "",
     excludeFromAnalysis: Boolean(round.excludeFromAnalysis),
     excludeFromHandicap: Boolean(round.excludeFromHandicap),
     context: normalizeRoundContext(round.context),

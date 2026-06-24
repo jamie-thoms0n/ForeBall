@@ -1,4 +1,4 @@
-const CACHE_NAME = "foreball-v19";
+const CACHE_NAME = "foreball-v27";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,8 @@ const APP_SHELL = [
   "./chart.local.js",
   "./manifest.json",
   "./logo-icon.png",
+  "./logo-icon-192.png",
+  "./logo-icon-512.png",
   "./logo-wordmark.png"
 ];
 
