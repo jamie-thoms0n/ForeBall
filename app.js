@@ -80,6 +80,17 @@ const HANDICAP_ALLOWANCES = [
   { min: 3, count: 1, adjustment: -2 }
 ];
 
+const SCRATCH_STROKES_LOST_BASELINE = {
+  penaltyStrokesPerRound: 0.5,
+  threePuttsPerRound: 0.4,
+  missedGirPerRound: 8,
+  greensideBunkersPerRound: 0.8,
+  teeMissesRightPerRound: 1.5,
+  missedGirCost: 0.35,
+  greensideBunkerCost: 0.5,
+  teeMissRightCost: 0.3
+};
+
 const EMPTY_ROUND_CONTEXT = {
   weather: "",
   windSpeed: null,
@@ -177,8 +188,9 @@ let pendingConfirmAction = null;
 let openRoundCardMenuId = null;
 let selectedRoundId = null;
 let editingCompletedRoundId = null;
-let analyticsRange = "last20";
-let analyticsTab = "overview";
+let analyticsRange = "lastX";
+let analyticsRoundCount = 20;
+let analyticsSection = "performanceOverview";
 let selectedRoundFormat = "18";
 let bagEditMode = false;
 let draftBag = [];
@@ -339,6 +351,9 @@ const el = {
   dashboardStats: document.getElementById("dashboardStats"),
   dashboardRecent: document.getElementById("dashboardRecent"),
   analyticsRangeSelect: document.getElementById("analyticsRangeSelect"),
+  analyticsRoundCountWrap: document.getElementById("analyticsRoundCountWrap"),
+  analyticsRoundCountSelect: document.getElementById("analyticsRoundCountSelect"),
+  analyticsSectionSelect: document.getElementById("analyticsSectionSelect"),
   analyticsContent: document.getElementById("analyticsContent"),
   roundList: document.getElementById("roundList"),
   roundListSection: document.getElementById("roundListSection"),
@@ -377,6 +392,7 @@ init();
 function init() {
   saveMeta();
   populateCourses();
+  populateAnalyticsRoundCounts();
   renderProfile();
   bindEvents();
   updateResumeButton();
@@ -427,14 +443,17 @@ function bindEvents() {
   document.querySelectorAll("[data-dashboard-view]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.dashboardView));
   });
-  document.querySelectorAll("[data-analytics-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      analyticsTab = button.dataset.analyticsTab;
-      renderAnalytics();
-    });
-  });
   el.analyticsRangeSelect.addEventListener("change", () => {
     analyticsRange = el.analyticsRangeSelect.value;
+    updateAnalyticsUi();
+    renderAnalytics();
+  });
+  el.analyticsRoundCountSelect.addEventListener("change", () => {
+    analyticsRoundCount = Number(el.analyticsRoundCountSelect.value) || 20;
+    renderAnalytics();
+  });
+  el.analyticsSectionSelect.addEventListener("change", () => {
+    analyticsSection = el.analyticsSectionSelect.value;
     renderAnalytics();
   });
   el.courseSelect.addEventListener("change", updateRoundFormatOptions);
@@ -555,6 +574,13 @@ function bindEvents() {
 function populateCourses() {
   el.courseSelect.innerHTML = COURSES.map((course) => `<option value="${course.name}">${course.name}</option>`).join("");
   updateRoundFormatOptions();
+}
+
+function populateAnalyticsRoundCounts() {
+  el.analyticsRoundCountSelect.innerHTML = Array.from({ length: 100 }, (_, index) => {
+    const count = index + 1;
+    return `<option value="${count}" ${count === analyticsRoundCount ? "selected" : ""}>${count}</option>`;
+  }).join("");
 }
 
 function renderProfile() {
@@ -877,6 +903,8 @@ function createRoundState(course, formatId = "18") {
     course: course.name,
     formatId: storedFormatId,
     formatLabel: format.label,
+    excludeFromAnalysis: false,
+    excludeFromHandicap: false,
     context: { ...EMPTY_ROUND_CONTEXT },
     currentHoleIndex: 0,
     holes: course.pars.slice(format.start, format.end).map((par, index) => {
@@ -1729,21 +1757,24 @@ function renderAnalytics() {
     el.analyticsContent.innerHTML = `<div class="panel"><h2>No data for this range</h2><p class="analytics-note">Try a wider range or add more completed rounds.</p></div>`;
     return;
   }
-  if (analyticsTab === "overview") renderAnalyticsOverview(filteredRounds, roundMetrics);
-  if (analyticsTab === "drivers") renderAnalyticsDrivers(filteredRounds, roundMetrics);
-  if (analyticsTab === "ballStriking") renderAnalyticsBallStriking(filteredRounds, roundMetrics);
-  if (analyticsTab === "shortGame") renderAnalyticsShortGame(filteredRounds, roundMetrics);
-  if (analyticsTab === "putting") renderAnalyticsPutting(filteredRounds, roundMetrics);
-  if (analyticsTab === "conditions") renderAnalyticsConditions(filteredRounds, roundMetrics);
-  if (analyticsTab === "trends") renderAnalyticsTrends(filteredRounds, roundMetrics);
-  if (analyticsTab === "comparisons") renderAnalyticsComparisons(filteredRounds, roundMetrics);
+  if (analyticsSection === "performanceOverview") renderPerformanceOverview(filteredRounds, roundMetrics);
+  else if (analyticsSection === "strokesLost") renderStrokesLostAnalysis(filteredRounds, roundMetrics);
+  else if (analyticsSection === "driving") renderDrivingAnalysis(filteredRounds);
+  else if (analyticsSection === "approachPlay") renderApproachPlayAnalysis(filteredRounds);
+  else if (analyticsSection === "shortGame") renderShortGameAnalysis(filteredRounds);
+  else if (analyticsSection === "putting") renderPuttingAnalysis(filteredRounds);
+  else if (analyticsSection === "scoringAnalysis") renderScoringAnalysis(filteredRounds);
+  else if (analyticsSection === "situationalAnalysis") renderSituationalAnalysis(filteredRounds);
+  else if (analyticsSection === "trends") renderExpandedTrends(filteredRounds, roundMetrics);
+  else if (analyticsSection === "practicePriorities") renderPracticePriorities(filteredRounds);
+  else renderAnalyticsPlaceholder(analyticsSection);
 }
 
 function updateAnalyticsUi() {
   el.analyticsRangeSelect.value = analyticsRange;
-  document.querySelectorAll("[data-analytics-tab]").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.analyticsTab === analyticsTab);
-  });
+  el.analyticsRoundCountSelect.value = String(analyticsRoundCount);
+  el.analyticsRoundCountWrap.classList.toggle("hidden", analyticsRange !== "lastX");
+  el.analyticsSectionSelect.value = analyticsSection;
 }
 
 function destroyAnalyticsCharts() {
@@ -1756,18 +1787,27 @@ function destroyAnalyticsCharts() {
 }
 
 function getAnalyticsRounds() {
-  const sorted = rounds.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sorted = analysisEligibleRounds(rounds).sort((a, b) => new Date(a.date) - new Date(b.date));
   const now = new Date();
-  if (analyticsRange === "last20") return sorted.slice(-20);
+  if (analyticsRange === "lastX") return sorted.slice(-analyticsRoundCount);
   if (analyticsRange === "all") return sorted;
   const cutoff = new Date(now);
   if (analyticsRange === "ytd" || analyticsRange === "calendarYear") {
     return sorted.filter((round) => new Date(round.date).getFullYear() === now.getFullYear());
   }
+  if (analyticsRange === "sixMonths") cutoff.setMonth(cutoff.getMonth() - 6);
   if (analyticsRange === "threeMonths") cutoff.setMonth(cutoff.getMonth() - 3);
   if (analyticsRange === "month") cutoff.setMonth(cutoff.getMonth() - 1);
   if (analyticsRange === "week") cutoff.setDate(cutoff.getDate() - 7);
   return sorted.filter((round) => new Date(round.date) >= cutoff);
+}
+
+function analysisEligibleRounds(sourceRounds = rounds) {
+  return sourceRounds.filter((round) => !round.excludeFromAnalysis);
+}
+
+function handicapEligibleRounds(sourceRounds = rounds) {
+  return sourceRounds.filter((round) => !round.excludeFromHandicap);
 }
 
 function buildRoundMetrics(round) {
@@ -1822,8 +1862,1387 @@ function buildRoundMetrics(round) {
     chipPutter: chipTypes.filter((type) => type === "putter").length,
     avgPar3: average(holes.filter((hole) => hole.par === 3).map((hole) => hole.score)),
     avgPar4: average(holes.filter((hole) => hole.par === 4).map((hole) => hole.score)),
-    avgPar5: average(holes.filter((hole) => hole.par === 5).map((hole) => hole.score))
+    avgPar5: average(holes.filter((hole) => hole.par === 5).map((hole) => hole.score)),
+    doubleBogeyPlus: holes.filter((hole) => hole.score !== null && hole.score - hole.par >= 2).length * scale
   };
+}
+
+function renderPerformanceOverview(filteredRounds, roundMetrics) {
+  const handicapLedger = calculateHandicapLedger(filteredRounds);
+  const currentHandicap = handicapLedger.at(-1)?.handicapIndex ?? null;
+  const fairwayAttempts = sum(filteredRounds.map((round) => round.holes.filter((hole) => hole.fairway !== null).length));
+  const girAttempts = sum(filteredRounds.map((round) => round.holes.filter((hole) => hole.gir !== null).length));
+  const doubleBogeyPlus = average(roundMetrics.map((item) => item.doubleBogeyPlus)).toFixed(1);
+  const consistency = roundConsistencyStats(roundMetrics);
+  const frontBack = frontBackSplitStats(filteredRounds);
+
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Performance Overview</h2>
+      </div>
+      <div class="stats-grid performance-overview-grid">
+        ${renderStatCards([
+          ["Handicap Trend", formatHandicapIndex(currentHandicap)],
+          ["Average Score", average(roundMetrics.map((item) => item.score)).toFixed(1)],
+          ["Best Score", Math.min(...roundMetrics.map((item) => item.score))],
+          ["Rounds Played", filteredRounds.length],
+          ["FIR %", `${pct(sum(roundMetrics.map((item) => item.firCount)), fairwayAttempts)}%`],
+          ["GIR %", `${pct(sum(roundMetrics.map((item) => item.girCount)), girAttempts)}%`],
+          ["Scrambling %", `${Math.round(average(roundMetrics.map((item) => item.scramblePct)))}%`],
+          ["Putts/Round", average(roundMetrics.map((item) => item.puttsTotal)).toFixed(1)],
+          ["Penalties/Round", average(roundMetrics.map((item) => item.penaltiesTotal)).toFixed(1)],
+          ["Double Bogeys+/Round", doubleBogeyPlus]
+        ])}
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Scoring Distribution</h2>
+          <span class="analytics-note">Shows consistency across score bands</span>
+        </div>
+        <div class="chart-wrap"><canvas id="performanceScoreDistributionChart"></canvas></div>
+        ${renderScoringDistributionTable(scoringDistributionRows(roundMetrics))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Round Consistency Index</h2>
+          <span class="analytics-note">Shows whether scoring is volatile or consistent</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Average Score", consistency.average],
+            ["Standard Deviation", consistency.standardDeviation],
+            ["Consistency", consistency.label]
+          ])}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Front 9 vs Back 9</h2>
+          <span class="analytics-note">Can identify fatigue or focus issues</span>
+        </div>
+        ${renderFrontBackTable(frontBack)}
+      </div>
+    </div>
+  `;
+
+  const distribution = scoringDistributionRows(roundMetrics);
+  drawBarChart(
+    "performanceScoreDistributionChart",
+    distribution.map((row) => row.label),
+    distribution.map((row) => row.rounds),
+    "Rounds"
+  );
+}
+
+function renderAnalyticsPlaceholder(section) {
+  const label = el.analyticsSectionSelect.options[el.analyticsSectionSelect.selectedIndex]?.text || section;
+  el.analyticsContent.innerHTML = `
+    <div class="panel">
+      <h2>${escapeHtml(label)}</h2>
+      <p class="analytics-note">This section is ready to be built next.</p>
+    </div>
+  `;
+}
+
+function renderStrokesLostAnalysis(filteredRounds, roundMetrics) {
+  const strokesLost = strokesLostRows(filteredRounds);
+  const doubleCauses = doubleBogeyCauseRows(filteredRounds);
+  const birdies = birdieOpportunityStats(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Strokes Lost Analysis</h2>
+        <p class="analytics-note">Any SG or SL data is estimated and relative to scratch handicap.</p>
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Estimated Strokes Lost / Round</h2>
+          <span class="analytics-note">Where you lose the most shots against scratch</span>
+        </div>
+        <div class="chart-wrap"><canvas id="strokesLostCategoryChart"></canvas></div>
+        ${renderStrokesLostTable(strokesLost)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Double Bogey Causes</h2>
+          <span class="analytics-note">Causes tracked on every double bogey or worse hole</span>
+        </div>
+        ${renderCauseTable(doubleCauses)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Birdie Opportunities</h2>
+          <span class="analytics-note">How often GIR turns into birdie</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["GIR opportunities", birdies.girOpportunities],
+            ["Birdies made", birdies.birdiesMade],
+            ["Conversion", `${birdies.conversion}%`]
+          ])}
+        </div>
+      </div>
+    </div>
+  `;
+  drawHorizontalBarChart(
+    "strokesLostCategoryChart",
+    strokesLost.map((row) => row.category),
+    strokesLost.map((row) => row.strokesLost),
+    "Strokes lost / round"
+  );
+}
+
+function strokesLostRows(sourceRounds) {
+  const perRound = sourceRounds.map(strokesLostForRound);
+  const rows = [
+    ["Penalties", "penalties"],
+    ["3 putts", "threePutts"],
+    ["Missed GIR", "missedGir"],
+    ["Greenside bunker", "greensideBunker"],
+    ["Tee misses right", "teeMissesRight"]
+  ].map(([category, key]) => ({
+    category,
+    strokesLost: roundToTenth(average(perRound.map((round) => round[key])))
+  }));
+  return rows.sort((a, b) => b.strokesLost - a.strokesLost);
+}
+
+function strokesLostForRound(round) {
+  const holes = round.holes.map(normalizeHole);
+  const scale = roundEighteenHoleScale(round);
+  const penaltyStrokes = holes.reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0) * scale;
+  const threePutts = holes.filter((hole) => hole.putts !== null && hole.putts >= 3).length * scale;
+  const missedGir = holes.filter((hole) => hole.gir === false).length * scale;
+  const greensideBunker = holes.reduce((sum, hole) => sum + (hole.greensideBunker || 0), 0) * scale;
+  const teeMissesRight = holes.filter((hole) => ["push", "overFade", "slice", "right", "rightOther"].includes(hole.fairwayMiss)).length * scale;
+  return {
+    penalties: Math.max(0, penaltyStrokes - SCRATCH_STROKES_LOST_BASELINE.penaltyStrokesPerRound),
+    threePutts: Math.max(0, threePutts - SCRATCH_STROKES_LOST_BASELINE.threePuttsPerRound),
+    missedGir: Math.max(0, missedGir - SCRATCH_STROKES_LOST_BASELINE.missedGirPerRound) * SCRATCH_STROKES_LOST_BASELINE.missedGirCost,
+    greensideBunker: Math.max(0, greensideBunker - SCRATCH_STROKES_LOST_BASELINE.greensideBunkersPerRound) * SCRATCH_STROKES_LOST_BASELINE.greensideBunkerCost,
+    teeMissesRight: Math.max(0, teeMissesRight - SCRATCH_STROKES_LOST_BASELINE.teeMissesRightPerRound) * SCRATCH_STROKES_LOST_BASELINE.teeMissRightCost
+  };
+}
+
+function renderStrokesLostTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Category</th><th>Strokes lost/round</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.category}</td><td>${row.strokesLost.toFixed(1)}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function doubleBogeyCauseRows(sourceRounds) {
+  const counts = new Map([
+    ["Penalty", 0],
+    ["3 putt", 0],
+    ["Missed approach", 0],
+    ["Bunker", 0],
+    ["Tee miss right", 0]
+  ]);
+  sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).forEach((hole) => {
+    if (hole.score === null || hole.score - hole.par < 2) return;
+    if ((hole.penaltyStrokes || 0) > 0) counts.set("Penalty", counts.get("Penalty") + 1);
+    if (hole.putts !== null && hole.putts >= 3) counts.set("3 putt", counts.get("3 putt") + 1);
+    if (hole.approachHit === false || hole.gir === false) counts.set("Missed approach", counts.get("Missed approach") + 1);
+    if ((hole.greensideBunker || 0) > 0 || (hole.fairwayBunker || 0) > 0) counts.set("Bunker", counts.get("Bunker") + 1);
+    if (["push", "overFade", "slice", "right", "rightOther"].includes(hole.fairwayMiss)) counts.set("Tee miss right", counts.get("Tee miss right") + 1);
+  });
+  return Array.from(counts.entries()).map(([cause, count]) => ({ cause, count })).sort((a, b) => b.count - a.count);
+}
+
+function renderCauseTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Cause</th><th>Count</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.cause}</td><td>${row.count}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function birdieOpportunityStats(sourceRounds) {
+  const girHoles = sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.gir === true && hole.score !== null);
+  const birdiesMade = girHoles.filter((hole) => hole.score < hole.par).length;
+  return {
+    girOpportunities: girHoles.length,
+    birdiesMade,
+    conversion: pct(birdiesMade, girHoles.length)
+  };
+}
+
+function renderDrivingAnalysis(filteredRounds) {
+  const clubRows = drivingClubRows(filteredRounds);
+  const missRows = drivingMissSeverityRows(filteredRounds);
+  const heatMap = drivingMissHeatMap(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Driving</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Club Performance Table</h2>
+          <span class="analytics-note">How tee club choice affects scoring and risk</span>
+        </div>
+        ${renderDrivingClubTable(clubRows)}
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Tee Club Decision Matrix</h2>
+          <span class="analytics-note">Average score by tee club</span>
+        </div>
+        <div class="chart-wrap"><canvas id="drivingDecisionChart"></canvas></div>
+        ${renderDecisionMatrix(clubRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Miss Severity</h2>
+          <span class="analytics-note">Not all misses are equal</span>
+        </div>
+        ${renderMissSeverityTable(missRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Miss Heat Map</h2>
+          <span class="analytics-note">Visual tee-shot dispersion, left to right</span>
+        </div>
+        ${renderDrivingHeatMap(heatMap)}
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>Penalty Risk By Club</h2>
+          <span class="analytics-note">Penalty holes divided by tee club uses</span>
+        </div>
+        <div class="chart-wrap"><canvas id="drivingPenaltyRiskChart"></canvas></div>
+      </div>
+    </div>
+  `;
+  drawBarChart("drivingDecisionChart", clubRows.map((row) => row.club), clubRows.map((row) => Number(row.avgScore)), "Avg Score");
+  drawBarChart("drivingPenaltyRiskChart", clubRows.map((row) => row.club), clubRows.map((row) => row.penaltyRisk), "Penalty Risk %");
+}
+
+function drivingClubRows(sourceRounds) {
+  const groups = new Map();
+  drivingHoles(sourceRounds).forEach((hole) => {
+    const club = hole.teeClub || "Unknown";
+    if (!groups.has(club)) groups.set(club, []);
+    groups.get(club).push(hole);
+  });
+  return Array.from(groups.entries()).map(([club, holes]) => {
+    const uses = holes.length;
+    const fairwayAttempts = holes.filter((hole) => hole.fairway !== null);
+    const penalties = holes.filter((hole) => (hole.penaltyStrokes || 0) > 0).length;
+    const misses = fairwayAttempts.filter((hole) => hole.fairway === false).length;
+    return {
+      club,
+      uses,
+      avgScore: average(holes.map((hole) => hole.score)).toFixed(1),
+      fir: pct(fairwayAttempts.filter((hole) => hole.fairway).length, fairwayAttempts.length),
+      penalties,
+      missPct: pct(misses, fairwayAttempts.length),
+      penaltyRisk: pct(penalties, uses)
+    };
+  }).sort((a, b) => b.uses - a.uses);
+}
+
+function drivingHoles(sourceRounds) {
+  return sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.par !== 3 && hole.score !== null);
+}
+
+function renderDrivingClubTable(rows) {
+  if (!rows.length) return `<p class="analytics-note">No tee club data yet.</p>`;
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Club</th><th>Uses</th><th>Avg Score</th><th>FIR</th><th>Penalties</th><th>Miss %</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.uses}</td><td>${row.avgScore}</td><td>${row.fir}%</td><td>${row.penalties}</td><td>${row.missPct}%</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDecisionMatrix(rows) {
+  if (!rows.length) return `<p class="analytics-note">No tee club data yet.</p>`;
+  return `
+    <div class="decision-list">
+      ${rows.map((row) => `<div><strong>${escapeHtml(row.club)}</strong> average score: ${row.avgScore}</div>`).join("")}
+    </div>
+  `;
+}
+
+function drivingMissSeverityRows(sourceRounds) {
+  const groups = new Map();
+  drivingHoles(sourceRounds).forEach((hole) => {
+    if (!hole.fairwayMiss) return;
+    const key = hole.fairwayMiss;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(hole);
+  });
+  return Array.from(groups.entries()).map(([miss, holes]) => ({
+    miss,
+    label: formatMissLabel(miss),
+    count: holes.length,
+    avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
+  })).sort((a, b) => Number(b.avgScore) - Number(a.avgScore));
+}
+
+function renderMissSeverityTable(rows) {
+  if (!rows.length) return `<p class="analytics-note">No fairway miss data yet.</p>`;
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Miss</th><th>Count</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function drivingMissHeatMap(sourceRounds) {
+  const holes = drivingHoles(sourceRounds);
+  return [
+    { key: "left", label: "Left", count: holes.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "left").length },
+    { key: "short", label: "Short", count: holes.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "short").length },
+    { key: "hit", label: "Hit", count: holes.filter((hole) => hole.fairway === true).length },
+    { key: "long", label: "Long", count: holes.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "long").length },
+    { key: "right", label: "Right", count: holes.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "right").length }
+  ];
+}
+
+function renderDrivingHeatMap(rows) {
+  const max = Math.max(...rows.map((row) => row.count), 1);
+  return `
+    <div class="miss-heatmap" aria-label="Driving miss heat map">
+      ${rows.map((row) => `
+        <div class="miss-heatmap-cell miss-${row.key}" style="--heat:${Math.max(0.12, row.count / max)}">
+          <span>${row.label}</span>
+          <strong>${row.count}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderApproachPlayAnalysis(filteredRounds) {
+  const distanceRows = approachDistanceRows(filteredRounds);
+  const clubRows = approachClubRows(filteredRounds);
+  const biasRows = approachMissBiasRows(filteredRounds);
+  const costRows = approachCostRows(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Approach Play</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Distance Matrix</h2>
+          <span class="analytics-note">GIR and scoring by approach distance</span>
+        </div>
+        ${renderApproachDistanceMatrix(distanceRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Club Matrix</h2>
+          <span class="analytics-note">GIR, miss short rate, and scoring by approach club</span>
+        </div>
+        ${renderApproachClubMatrix(clubRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Miss Bias</h2>
+          <span class="analytics-note">Where approaches tend to miss</span>
+        </div>
+        ${renderApproachMissBias(biasRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>GIR By Lie</h2>
+          <span class="analytics-note">Requires adding approach lie to score entry</span>
+        </div>
+        <p class="analytics-note">Approach lie is not collected yet. Once added, this will compare fairway, rough, bunker, recovery, and tee-lie GIR rates.</p>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Approach Cost Matrix</h2>
+          <span class="analytics-note">Average score by approach outcome</span>
+        </div>
+        ${renderApproachCostMatrix(costRows)}
+      </div>
+    </div>
+  `;
+}
+
+function approachHoles(sourceRounds) {
+  return sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.score !== null && (hole.approachDistance !== null || hole.approachClub || hole.gir !== null || hole.approachHit !== null));
+}
+
+function approachDistanceRows(sourceRounds) {
+  const buckets = [
+    { label: "0-50", min: 0, max: 50 },
+    { label: "50-100", min: 50, max: 100 },
+    { label: "100-150", min: 100, max: 150 },
+    { label: "150-200", min: 150, max: 200 },
+    { label: "200+", min: 200, max: Infinity }
+  ];
+  const holes = approachHoles(sourceRounds).filter((hole) => Number.isFinite(hole.approachDistance));
+  return buckets.map((bucket) => {
+    const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket));
+    return {
+      distance: bucket.label,
+      attempts: bucketHoles.length,
+      gir: pct(bucketHoles.filter((hole) => hole.gir).length, bucketHoles.filter((hole) => hole.gir !== null).length),
+      avgScore: average(bucketHoles.map((hole) => hole.score)).toFixed(1)
+    };
+  });
+}
+
+function renderApproachDistanceMatrix(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Distance</th><th>Attempts</th><th>GIR</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.distance}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function approachClubRows(sourceRounds) {
+  const groups = new Map();
+  approachHoles(sourceRounds).forEach((hole) => {
+    const club = hole.approachClub || "Unknown";
+    if (!groups.has(club)) groups.set(club, []);
+    groups.get(club).push(hole);
+  });
+  return Array.from(groups.entries()).map(([club, holes]) => {
+    const attempts = holes.length;
+    const girHoles = holes.filter((hole) => hole.gir !== null);
+    const missShort = holes.filter((hole) => findPrimaryMiss(hole.approachMiss) === "short").length;
+    return {
+      club,
+      attempts,
+      gir: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
+      missShort: pct(missShort, attempts),
+      avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
+    };
+  }).sort((a, b) => b.attempts - a.attempts);
+}
+
+function renderApproachClubMatrix(rows) {
+  if (!rows.length) return `<p class="analytics-note">No approach club data yet.</p>`;
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Club</th><th>Attempts</th><th>GIR</th><th>Miss Short</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.missShort}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function approachMissBiasRows(sourceRounds) {
+  const holes = approachHoles(sourceRounds).filter((hole) => hole.approachHit === false || hole.approachMiss);
+  const keys = [
+    { key: "short", label: "Short", arrow: "↓" },
+    { key: "right", label: "Right", arrow: "→" },
+    { key: "long", label: "Long", arrow: "↑" },
+    { key: "left", label: "Left", arrow: "←" }
+  ];
+  return keys.map((item) => ({
+    ...item,
+    count: holes.filter((hole) => findPrimaryMiss(hole.approachMiss) === item.key).length,
+    pct: pct(holes.filter((hole) => findPrimaryMiss(hole.approachMiss) === item.key).length, holes.length)
+  }));
+}
+
+function renderApproachMissBias(rows) {
+  return `
+    <div class="miss-bias-grid">
+      ${rows.map((row) => `
+        <div class="miss-bias-card">
+          <span class="miss-bias-arrow">${row.arrow}</span>
+          <strong>${row.pct}%</strong>
+          <span>${row.label}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function approachCostRows(sourceRounds) {
+  const holes = approachHoles(sourceRounds);
+  const rows = [
+    { result: "GIR hit", holes: holes.filter((hole) => hole.gir === true || hole.approachHit === true) },
+    { result: "GIR missed short", holes: holes.filter((hole) => hole.gir === false && findPrimaryMiss(hole.approachMiss) === "short") },
+    { result: "GIR missed right", holes: holes.filter((hole) => hole.gir === false && findPrimaryMiss(hole.approachMiss) === "right") },
+    { result: "GIR missed left", holes: holes.filter((hole) => hole.gir === false && findPrimaryMiss(hole.approachMiss) === "left") },
+    { result: "GIR missed long", holes: holes.filter((hole) => hole.gir === false && findPrimaryMiss(hole.approachMiss) === "long") }
+  ];
+  return rows.map((row) => ({
+    result: row.result,
+    attempts: row.holes.length,
+    avgScore: average(row.holes.map((hole) => hole.score)).toFixed(1)
+  }));
+}
+
+function renderApproachCostMatrix(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Result</th><th>Attempts</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.result}</td><td>${row.attempts}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderShortGameAnalysis(filteredRounds) {
+  const scrambleRows = scramblingBreakdownRows(filteredRounds);
+  const upDownRows = upAndDownByChipTypeRows(filteredRounds);
+  const missedGir = missedGirFinishStats(filteredRounds);
+  const sand = sandSaveStats(filteredRounds);
+  const recovery = missedFairwayRecoveryStats(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Short Game</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Scrambling Breakdown</h2>
+          <span class="analytics-note">Scramble rate by recovery situation</span>
+        </div>
+        ${renderScramblingBreakdownTable(scrambleRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Up-and-Down by Chip Type</h2>
+          <span class="analytics-note">How each chip type converts missed greens</span>
+        </div>
+        ${renderUpAndDownTable(upDownRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Average Strokes After Missed GIR</h2>
+          <span class="analytics-note">Putts plus chips/bunker shots after missed greens</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Missed GIR holes", missedGir.count],
+            ["Average finish", `${missedGir.averageFinish} strokes`]
+          ])}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Sand Saves</h2>
+          <span class="analytics-note">Bunker holes where par or better was saved</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Bunker holes", sand.bunkerHoles],
+            ["Saved par", sand.savedPar],
+            ["Sand save %", `${sand.savePct}%`]
+          ])}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Recovery Efficiency</h2>
+          <span class="analytics-note">Performance after a missed fairway</span>
+        </div>
+        ${renderRecoveryEfficiencyTable(recovery)}
+      </div>
+    </div>
+  `;
+}
+
+function scramblingBreakdownRows(sourceRounds) {
+  const holes = missedGirHoles(sourceRounds);
+  const rows = [
+    { situation: "Regular chip", holes: holes.filter((hole) => (hole.chipTypes || []).includes("regular")) },
+    { situation: "Rough chip", holes: holes.filter((hole) => (hole.chipTypes || []).includes("rough")) },
+    { situation: "Bunker", holes: holes.filter((hole) => (hole.greensideBunker || 0) > 0) }
+  ];
+  return rows.map((row) => ({
+    situation: row.situation,
+    attempts: row.holes.length,
+    scramblePct: pct(row.holes.filter(isScrambleSuccess).length, row.holes.length)
+  }));
+}
+
+function renderScramblingBreakdownTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Situation</th><th>Attempts</th><th>Scramble %</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.situation}</td><td>${row.attempts}</td><td>${row.scramblePct}%</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function upAndDownByChipTypeRows(sourceRounds) {
+  const labels = [
+    ["regular", "Regular"],
+    ["bumpRun", "Bump and run"],
+    ["flop", "Flop"],
+    ["highObstacle", "High over obstacle"],
+    ["rough", "Out of rough"],
+    ["bank", "Into a bank"],
+    ["putter", "Putter"]
+  ];
+  const holes = missedGirHoles(sourceRounds).filter((hole) => (hole.chips || 0) > 0);
+  return labels.map(([key, label]) => {
+    const matching = holes.filter((hole) => (hole.chipTypes || []).includes(key));
+    return {
+      type: label,
+      attempts: matching.length,
+      upDownPct: pct(matching.filter(isScrambleSuccess).length, matching.length),
+      avgScore: average(matching.map((hole) => hole.score)).toFixed(1)
+    };
+  });
+}
+
+function renderUpAndDownTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Chip Type</th><th>Attempts</th><th>Up-and-Down %</th><th>Avg Score</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.type}</td><td>${row.attempts}</td><td>${row.upDownPct}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function missedGirFinishStats(sourceRounds) {
+  const holes = missedGirHoles(sourceRounds);
+  const finishes = holes.map((hole) => (hole.putts || 0) + (hole.chips || 0) + (hole.greensideBunker || 0));
+  return {
+    count: holes.length,
+    averageFinish: average(finishes).toFixed(1)
+  };
+}
+
+function sandSaveStats(sourceRounds) {
+  const holes = sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.score !== null && (hole.greensideBunker || 0) > 0);
+  const savedPar = holes.filter((hole) => hole.score <= hole.par).length;
+  return {
+    bunkerHoles: holes.length,
+    savedPar,
+    savePct: pct(savedPar, holes.length)
+  };
+}
+
+function missedFairwayRecoveryStats(sourceRounds) {
+  const holes = sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.score !== null && hole.fairway === false);
+  return [
+    { metric: "Avg score", value: average(holes.map((hole) => hole.score)).toFixed(1) },
+    { metric: "GIR", value: `${pct(holes.filter((hole) => hole.gir).length, holes.filter((hole) => hole.gir !== null).length)}%` },
+    { metric: "Scramble", value: `${pct(holes.filter(isScrambleSuccess).length, holes.filter((hole) => hole.gir === false).length)}%` }
+  ];
+}
+
+function renderRecoveryEfficiencyTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.metric}</td><td>${row.value}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function missedGirHoles(sourceRounds) {
+  return sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.score !== null && hole.gir === false);
+}
+
+function isScrambleSuccess(hole) {
+  return hole.score !== null && hole.score <= hole.par;
+}
+
+function renderPuttingAnalysis(filteredRounds) {
+  const makeRows = puttingMakeRows(filteredRounds);
+  const lag = lagPuttingStats(filteredRounds);
+  const expected = expectedPuttsStats(filteredRounds);
+  const pressure = puttingPressureStats(filteredRounds);
+  const scatter = firstPuttDistanceScorePoints(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Putting</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Make Percentage by Distance</h2>
+          <span class="analytics-note">Holed putts inferred from the final putt length recorded on each hole</span>
+        </div>
+        ${renderPuttingMakeTable(makeRows)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Lag Putting Analysis</h2>
+          <span class="analytics-note">First putts longer than 20 feet</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Lag attempts", lag.attempts],
+            ["Average leave", `${lag.averageLeave} ft`],
+            ["3-putt rate", `${lag.threePuttRate}%`]
+          ])}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Expected Putts</h2>
+          <span class="analytics-note">Actual putts compared with a scratch-style benchmark by first-putt distance</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Expected", expected.expected],
+            ["Actual", expected.actual],
+            ["Difference", expected.difference]
+          ])}
+        </div>
+      </div>
+      <div class="chart-panel">
+        <div class="analytics-section-header">
+          <h2>First Putt Distance vs Score</h2>
+          <span class="analytics-note">Each point is one hole</span>
+        </div>
+        <div class="chart-wrap"><canvas id="puttingDistanceScoreChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Putting Pressure Metric</h2>
+          <span class="analytics-note">Inside 6 feet, inferred from final putt length</span>
+        </div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Attempted", pressure.attempted],
+            ["Holed", pressure.holed],
+            ["Make %", `${pressure.makePct}%`]
+          ])}
+        </div>
+      </div>
+    </div>
+  `;
+  drawScatter("puttingDistanceScoreChart", scatter, "First putt distance", "Score");
+}
+
+function puttingMakeRows(sourceRounds) {
+  const attempts = puttingAttemptRows(sourceRounds);
+  const buckets = [
+    { label: "0-3 ft", min: 0, max: 3 },
+    { label: "3-6 ft", min: 3, max: 6 },
+    { label: "6-10 ft", min: 6, max: 10 },
+    { label: "10-20 ft", min: 10, max: 20 },
+    { label: "20-40 ft", min: 20, max: 40 },
+    { label: "40+ ft", min: 40, max: Infinity }
+  ];
+  return buckets.map((bucket) => {
+    const bucketAttempts = attempts.filter((attempt) => inBucket(attempt.distance, bucket));
+    return {
+      bucket: bucket.label,
+      attempts: bucketAttempts.length,
+      made: bucketAttempts.filter((attempt) => attempt.made).length,
+      makePct: pct(bucketAttempts.filter((attempt) => attempt.made).length, bucketAttempts.length)
+    };
+  });
+}
+
+function renderPuttingMakeTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Distance</th><th>Attempts</th><th>Holed</th><th>Make %</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.bucket}</td><td>${row.attempts}</td><td>${row.made}</td><td>${row.makePct}%</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function lagPuttingStats(sourceRounds) {
+  const holes = puttingHoles(sourceRounds).filter((hole) => Number.isFinite(hole.puttDistances?.[0]) && hole.puttDistances[0] > 20);
+  const leaves = holes.map((hole) => hole.puttDistances?.[1]).filter(Number.isFinite);
+  return {
+    attempts: holes.length,
+    averageLeave: average(leaves).toFixed(1),
+    threePuttRate: pct(holes.filter((hole) => hole.putts >= 3).length, holes.length)
+  };
+}
+
+function expectedPuttsStats(sourceRounds) {
+  const holes = puttingHoles(sourceRounds).filter((hole) => Number.isFinite(hole.puttDistances?.[0]));
+  const actual = sum(holes.map((hole) => hole.putts));
+  const expected = sum(holes.map((hole) => expectedPuttsForDistance(hole.puttDistances[0])));
+  const perRoundScale = sourceRounds.length ? roundToTenth((actual - expected) / sourceRounds.length) : 0;
+  return {
+    expected: expected.toFixed(1),
+    actual: actual.toFixed(1),
+    difference: `${perRoundScale >= 0 ? "Losing" : "Gaining"} ${Math.abs(perRoundScale).toFixed(1)} shots/round`
+  };
+}
+
+function expectedPuttsForDistance(distance) {
+  if (distance <= 3) return 1.05;
+  if (distance <= 6) return 1.25;
+  if (distance <= 10) return 1.55;
+  if (distance <= 20) return 1.85;
+  if (distance <= 40) return 2.05;
+  return 2.25;
+}
+
+function firstPuttDistanceScorePoints(sourceRounds) {
+  return puttingHoles(sourceRounds)
+    .filter((hole) => Number.isFinite(hole.puttDistances?.[0]) && Number.isFinite(hole.score))
+    .map((hole) => ({ x: hole.puttDistances[0], y: hole.score }));
+}
+
+function puttingPressureStats(sourceRounds) {
+  const attempts = puttingAttemptRows(sourceRounds).filter((attempt) => attempt.distance <= 6);
+  const holed = attempts.filter((attempt) => attempt.made).length;
+  return {
+    attempted: attempts.length,
+    holed,
+    makePct: pct(holed, attempts.length)
+  };
+}
+
+function puttingAttemptRows(sourceRounds) {
+  return puttingHoles(sourceRounds).flatMap((hole) => {
+    const distances = Array.isArray(hole.puttDistances) ? hole.puttDistances.filter(Number.isFinite) : [];
+    return distances.map((distance, index) => ({
+      distance,
+      made: index === distances.length - 1
+    }));
+  });
+}
+
+function puttingHoles(sourceRounds) {
+  return sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) => hole.putts !== null && Array.isArray(hole.puttDistances) && hole.puttDistances.length);
+}
+
+function renderScoringAnalysis(filteredRounds) {
+  const parRows = scoreByParRows(filteredRounds);
+  const difficultyRows = holeDifficultyRows(filteredRounds);
+  const bogey = bogeyAvoidanceStats(filteredRounds);
+  const blowUps = blowUpAnalysisRows(filteredRounds);
+  const afterBad = scoringAfterBadHoleStats(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Scoring Analysis</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Score By Hole Par</h2><span class="analytics-note">Average scoring by par type</span></div>
+        ${renderSimpleTable(["Par", "Avg"], parRows.map((row) => [row.par, row.avg]))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Hole Difficulty Ranking</h2><span class="analytics-note">Across all played courses</span></div>
+        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], difficultyRows.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Bogey Avoidance</h2><span class="analytics-note">Distribution of scoring outcomes</span></div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Pars or better", `${bogey.parOrBetter}%`],
+            ["Bogeys", `${bogey.bogey}%`],
+            ["Double+", `${bogey.doublePlus}%`]
+          ])}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Blow-Up Hole Analysis</h2><span class="analytics-note">Double, triple, quad+ and common causes</span></div>
+        ${renderSimpleTable(["Type", "Count", "Top Cause"], blowUps.map((row) => [row.type, row.count, row.topCause]))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Scoring After Bad Hole</h2><span class="analytics-note">Mental game metric after double bogey or worse</span></div>
+        <div class="stats-grid">
+          ${renderStatCards([
+            ["Follow-up holes", afterBad.count],
+            ["Avg score vs par", afterBad.averageVsPar]
+          ])}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function scoreByParRows(sourceRounds) {
+  return [3, 4, 5].map((par) => {
+    const holes = allScoredHoles(sourceRounds).filter((hole) => hole.par === par);
+    return { par: `Par ${par}`, avg: average(holes.map((hole) => hole.score)).toFixed(1) };
+  });
+}
+
+function holeDifficultyRows(sourceRounds) {
+  const groups = new Map();
+  sourceRounds.forEach((round) => {
+    round.holes.map(normalizeHole).forEach((hole) => {
+      if (hole.score === null) return;
+      const key = `${round.course} #${hole.hole}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(hole);
+    });
+  });
+  return Array.from(groups.entries()).map(([hole, holes]) => ({
+    hole,
+    rounds: holes.length,
+    avgScore: average(holes.map((item) => item.score)).toFixed(1),
+    avgVsPar: signedNumber(average(holes.map((item) => item.score - item.par)))
+  })).sort((a, b) => Number(b.avgVsPar) - Number(a.avgVsPar));
+}
+
+function bogeyAvoidanceStats(sourceRounds) {
+  const holes = allScoredHoles(sourceRounds);
+  return {
+    parOrBetter: pct(holes.filter((hole) => hole.score <= hole.par).length, holes.length),
+    bogey: pct(holes.filter((hole) => hole.score - hole.par === 1).length, holes.length),
+    doublePlus: pct(holes.filter((hole) => hole.score - hole.par >= 2).length, holes.length)
+  };
+}
+
+function blowUpAnalysisRows(sourceRounds) {
+  const holes = allScoredHoles(sourceRounds);
+  const rows = [
+    { type: "Double+", holes: holes.filter((hole) => hole.score - hole.par >= 2) },
+    { type: "Triple+", holes: holes.filter((hole) => hole.score - hole.par >= 3) },
+    { type: "Quad+", holes: holes.filter((hole) => hole.score - hole.par >= 4) }
+  ];
+  return rows.map((row) => ({
+    type: row.type,
+    count: row.holes.length,
+    topCause: topBlowUpCause(row.holes)
+  }));
+}
+
+function topBlowUpCause(holes) {
+  const counts = new Map([
+    ["Penalty", 0],
+    ["3 putt", 0],
+    ["Missed approach", 0],
+    ["Bunker", 0],
+    ["Tee miss", 0]
+  ]);
+  holes.forEach((hole) => {
+    if ((hole.penaltyStrokes || 0) > 0) counts.set("Penalty", counts.get("Penalty") + 1);
+    if (hole.putts !== null && hole.putts >= 3) counts.set("3 putt", counts.get("3 putt") + 1);
+    if (hole.approachHit === false || hole.gir === false) counts.set("Missed approach", counts.get("Missed approach") + 1);
+    if ((hole.greensideBunker || 0) > 0 || (hole.fairwayBunker || 0) > 0) counts.set("Bunker", counts.get("Bunker") + 1);
+    if (hole.fairway === false) counts.set("Tee miss", counts.get("Tee miss") + 1);
+  });
+  const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+  return top && top[1] ? `${top[0]} (${top[1]})` : "None logged";
+}
+
+function scoringAfterBadHoleStats(sourceRounds) {
+  const following = [];
+  sourceRounds.forEach((round) => {
+    const holes = round.holes.map(normalizeHole);
+    holes.forEach((hole, index) => {
+      if (hole.score === null || hole.score - hole.par < 2) return;
+      const next = holes[index + 1];
+      if (next?.score !== null && next?.score !== undefined) following.push(next.score - next.par);
+    });
+  });
+  return {
+    count: following.length,
+    averageVsPar: signedNumber(average(following))
+  };
+}
+
+function renderSituationalAnalysis(filteredRounds) {
+  const frontBack = frontBackSplitStats(filteredRounds);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Situational Analysis</h2>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Performance In Wind</h2><span class="analytics-note">Average adjusted score by wind speed bucket</span></div>
+        ${renderSimpleTable(["Wind", "Rounds", "Score"], windSpeedBucketRows(filteredRounds).map((row) => [row.wind, row.rounds, row.score]))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Weather Impact</h2><span class="analytics-note">Average adjusted score by weather</span></div>
+        ${renderContextGroupTable(groupRoundsByContext(filteredRounds, "weather"), "Weather")}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Fatigue Analysis</h2><span class="analytics-note">Front vs back nine performance</span></div>
+        ${renderFrontBackTable(frontBack)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Nutrition Analysis</h2><span class="analytics-note">Rounds with each food compared against rounds without it</span></div>
+        ${renderNutritionTable(nutritionRows(filteredRounds))}
+      </div>
+    </div>
+  `;
+}
+
+function windSpeedBucketRows(sourceRounds) {
+  const buckets = [
+    { wind: "0-10", min: 0, max: 10 },
+    { wind: "10-20", min: 10, max: 20 },
+    { wind: "20+", min: 20, max: Infinity }
+  ];
+  return buckets.map((bucket) => {
+    const matching = sourceRounds.filter((round) => inBucket(normalizeRoundContext(round.context).windSpeed, bucket));
+    return {
+      wind: bucket.wind,
+      rounds: matching.length,
+      score: matching.length ? average(matching.map(adjustedRoundScore)).toFixed(1) : "—"
+    };
+  });
+}
+
+function nutritionRows(sourceRounds) {
+  const foods = new Map();
+  sourceRounds.forEach((round) => {
+    normalizeRoundContext(round.context).food.forEach((entry) => {
+      const key = entry.name.trim().toLowerCase();
+      if (!key) return;
+      if (!foods.has(key)) foods.set(key, entry.name.trim());
+    });
+  });
+  return Array.from(foods.entries()).map(([key, label]) => {
+    const withFood = sourceRounds.filter((round) => normalizeRoundContext(round.context).food.some((entry) => entry.name.trim().toLowerCase() === key));
+    const withoutFood = sourceRounds.filter((round) => !normalizeRoundContext(round.context).food.some((entry) => entry.name.trim().toLowerCase() === key));
+    return {
+      food: label,
+      withRounds: withFood.length,
+      withAvg: withFood.length ? average(withFood.map(adjustedRoundScore)).toFixed(1) : "—",
+      withoutAvg: withoutFood.length ? average(withoutFood.map(adjustedRoundScore)).toFixed(1) : "—"
+    };
+  }).sort((a, b) => Number(a.withAvg) - Number(b.withAvg));
+}
+
+function renderNutritionTable(rows) {
+  if (!rows.length) return `<p class="analytics-note">No food data logged yet.</p>`;
+  return renderSimpleTable(
+    ["Food", "Rounds with", "With avg", "Without avg"],
+    rows.map((row) => [row.food, row.withRounds, row.withAvg, row.withoutAvg])
+  );
+}
+
+function renderExpandedTrends(filteredRounds, roundMetrics) {
+  const rollingScore = rollingAverage(roundMetrics.map((item) => item.score), 3);
+  const rollingGir = rollingAverage(roundMetrics.map((item) => item.girPct), 5);
+  const rollingFir = rollingAverage(roundMetrics.map((item) => item.firPct), 5);
+  const rollingPutts = rollingAverage(roundMetrics.map((item) => item.puttsTotal), 5);
+  const handicapLedger = calculateHandicapLedger(filteredRounds);
+  const rollingHandicap = handicapLedger.map((item) => item.handicapIndex);
+  const rollingDoubleBogeys = rollingAverage(roundMetrics.map((item) => item.doubleBogeyPlus), 5);
+  const rollingPenalties = rollingAverage(roundMetrics.map((item) => item.penaltiesTotal), 5);
+  const rollingBirdies = rollingAverage(filteredRounds.map(birdieCount), 5);
+  const rollingConsistency = rollingConsistencySeries(roundMetrics.map((item) => item.score), 5);
+  const recentDelta = compareRecentVsPrevious(roundMetrics);
+  const labels = filteredRounds.map((round) => round.date);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Trends</h2>
+      </div>
+      <div class="stats-grid">
+        ${renderStatCards([
+          ["Score Δ", recentDelta.score],
+          ["GIR Δ", recentDelta.girPct],
+          ["FIR Δ", recentDelta.firPct],
+          ["Putts Δ", recentDelta.putts],
+          ["Penalties Δ", recentDelta.penalties],
+          ["Scramble Δ", recentDelta.scramble]
+        ])}
+      </div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Score Trend</h2><span class="analytics-note">3-round rolling average</span></div><div class="chart-wrap"><canvas id="analyticsTrendScore"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Skill Trends</h2><span class="analytics-note">5-round rolling GIR, FIR, and putts</span></div><div class="chart-wrap"><canvas id="analyticsTrendSkills"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Handicap Trend</h2><span class="analytics-note">Handicap index by round</span></div><div class="chart-wrap"><canvas id="analyticsTrendHandicap"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Mistake Trends</h2><span class="analytics-note">Double bogeys and penalties</span></div><div class="chart-wrap"><canvas id="analyticsTrendMistakes"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Birdie Trend</h2><span class="analytics-note">5-round rolling birdies per round</span></div><div class="chart-wrap"><canvas id="analyticsTrendBirdies"></canvas></div></div>
+      <div class="chart-panel"><div class="analytics-section-header"><h2>Rolling Consistency Trend</h2><span class="analytics-note">5-round scoring standard deviation</span></div><div class="chart-wrap"><canvas id="analyticsTrendConsistency"></canvas></div></div>
+    </div>
+  `;
+  drawMultiLineChart("analyticsTrendScore", labels, [{ label: "Score", data: rollingScore, color: "#041d4d" }], "Score");
+  drawMultiLineChart("analyticsTrendSkills", labels, [
+    { label: "GIR %", data: rollingGir, color: "#63d11f" },
+    { label: "FIR %", data: rollingFir, color: "#041d4d" },
+    { label: "Putts", data: rollingPutts, color: "#8aa2d3" }
+  ], "Rolling");
+  drawMultiLineChart("analyticsTrendHandicap", labels, [{ label: "Handicap", data: rollingHandicap, color: "#041d4d" }], "Index");
+  drawMultiLineChart("analyticsTrendMistakes", labels, [
+    { label: "Double bogey+", data: rollingDoubleBogeys, color: "#d48f3f" },
+    { label: "Penalties", data: rollingPenalties, color: "#c24c4c" }
+  ], "Per round");
+  drawMultiLineChart("analyticsTrendBirdies", labels, [{ label: "Birdies", data: rollingBirdies, color: "#63d11f" }], "Birdies");
+  drawMultiLineChart("analyticsTrendConsistency", labels, [{ label: "Std dev", data: rollingConsistency, color: "#8aa2d3" }], "Std dev");
+}
+
+function rollingConsistencySeries(scores, windowSize) {
+  return scores.map((_, index) => standardDeviation(scores.slice(Math.max(0, index - windowSize + 1), index + 1)));
+}
+
+function birdieCount(round) {
+  return round.holes.map(normalizeHole).filter((hole) => hole.score !== null && hole.score < hole.par).length * roundEighteenHoleScale(round);
+}
+
+function renderPracticePriorities(filteredRounds) {
+  const priorities = practicePriorityRows(filteredRounds).slice(0, 5);
+  el.analyticsContent.innerHTML = `
+    <div class="analytics-stack">
+      <div class="analytics-page-title">
+        <p class="eyebrow">${filterLabel()}</p>
+        <h2>Practice Priorities</h2>
+        <p class="analytics-note">Automatically ranked by estimated scoring upside, sample size, and how much worse the pattern is than a reasonable target.</p>
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header">
+          <h2>Highest Return Practice Areas</h2>
+          <span class="analytics-note">Estimated gain is a directional guide, not a formal strokes-gained model</span>
+        </div>
+        ${renderPracticePriorityList(priorities)}
+      </div>
+    </div>
+  `;
+}
+
+function practicePriorityRows(sourceRounds) {
+  return [
+    ...approachPracticePriorities(sourceRounds),
+    lagPuttPracticePriority(sourceRounds),
+    driverRightPracticePriority(sourceRounds),
+    penaltyPracticePriority(sourceRounds),
+    bunkerPracticePriority(sourceRounds),
+    scramblingPracticePriority(sourceRounds)
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.gain - a.gain);
+}
+
+function approachPracticePriorities(sourceRounds) {
+  const buckets = [
+    { label: "0-50y", min: 0, max: 50, targetGir: 70 },
+    { label: "50-100y", min: 50, max: 100, targetGir: 58 },
+    { label: "100-150y", min: 100, max: 150, targetGir: 42 },
+    { label: "150-200y", min: 150, max: 200, targetGir: 28 },
+    { label: "200y+", min: 200, max: Infinity, targetGir: 18 }
+  ];
+  const holes = approachHoles(sourceRounds).filter((hole) => Number.isFinite(hole.approachDistance) && hole.gir !== null);
+  return buckets.map((bucket) => {
+    const bucketHoles = holes.filter((hole) => inBucket(hole.approachDistance, bucket));
+    if (bucketHoles.length < 5) return null;
+    const girPct = pct(bucketHoles.filter((hole) => hole.gir).length, bucketHoles.length);
+    const missPct = 100 - girPct;
+    const avgScore = average(bucketHoles.map((hole) => hole.score));
+    const attemptsPerRound = bucketHoles.length / Math.max(sourceRounds.length, 1);
+    const gap = Math.max(0, bucket.targetGir - girPct);
+    const gain = roundToTenth(attemptsPerRound * (gap / 100) * 0.65);
+    if (gain < 0.2) return null;
+    return {
+      title: `Approach shots ${bucket.label}`,
+      detail: `You miss ${missPct}% of greens and average ${avgScore.toFixed(1)} on these holes.`,
+      gain
+    };
+  }).filter(Boolean);
+}
+
+function lagPuttPracticePriority(sourceRounds) {
+  const holes = puttingHoles(sourceRounds).filter((hole) => Number.isFinite(hole.puttDistances?.[0]) && hole.puttDistances[0] >= 20);
+  if (holes.length < 5) return null;
+  const threePuttPct = pct(holes.filter((hole) => hole.putts >= 3).length, holes.length);
+  const attemptsPerRound = holes.length / Math.max(sourceRounds.length, 1);
+  const gain = roundToTenth(attemptsPerRound * Math.max(0, threePuttPct - 12) / 100);
+  if (gain < 0.2) return null;
+  return {
+    title: "3-putts from 20ft+",
+    detail: `You 3-putt ${threePuttPct}% of the time from long range.`,
+    gain
+  };
+}
+
+function driverRightPracticePriority(sourceRounds) {
+  const holes = drivingHoles(sourceRounds).filter((hole) => hole.teeClub === "Driver" || !hole.teeClub);
+  const misses = holes.filter((hole) => hole.fairway === false || hole.fairwayMiss);
+  if (misses.length < 5) return null;
+  const rightMisses = misses.filter((hole) => findPrimaryMiss(hole.fairwayMiss) === "right");
+  const rightPct = pct(rightMisses.length, misses.length);
+  const rightAvg = average(rightMisses.map((hole) => hole.score - hole.par));
+  const otherAvg = average(misses.filter((hole) => findPrimaryMiss(hole.fairwayMiss) !== "right").map((hole) => hole.score - hole.par));
+  const cost = Math.max(0, rightAvg - otherAvg);
+  const rightPerRound = rightMisses.length / Math.max(sourceRounds.length, 1);
+  const gain = roundToTenth(rightPerRound * Math.max(0.25, cost) * 0.5);
+  if (gain < 0.2 || rightPct < 35) return null;
+  return {
+    title: "Driver misses right",
+    detail: `${rightPct}% of driver misses are right and cost about ${cost.toFixed(1)} shots each.`,
+    gain
+  };
+}
+
+function penaltyPracticePriority(sourceRounds) {
+  const penaltyTotal = allScoredHoles(sourceRounds).reduce((sum, hole) => sum + (hole.penaltyStrokes || 0), 0);
+  const perRound = penaltyTotal / Math.max(sourceRounds.length, 1);
+  const gain = roundToTenth(Math.max(0, perRound - 0.5));
+  if (gain < 0.2) return null;
+  return {
+    title: "Penalty avoidance",
+    detail: `You average ${perRound.toFixed(1)} penalty strokes per round.`,
+    gain
+  };
+}
+
+function bunkerPracticePriority(sourceRounds) {
+  const sand = sandSaveStats(sourceRounds);
+  if (sand.bunkerHoles < 5 || sand.savePct >= 35) return null;
+  const bunkerPerRound = sand.bunkerHoles / Math.max(sourceRounds.length, 1);
+  const gain = roundToTenth(bunkerPerRound * ((35 - sand.savePct) / 100) * 0.7);
+  if (gain < 0.2) return null;
+  return {
+    title: "Greenside bunker saves",
+    detail: `You save par ${sand.savePct}% of the time from greenside bunkers.`,
+    gain
+  };
+}
+
+function scramblingPracticePriority(sourceRounds) {
+  const missed = missedGirHoles(sourceRounds);
+  if (missed.length < 8) return null;
+  const scramblePct = pct(missed.filter(isScrambleSuccess).length, missed.length);
+  const missedPerRound = missed.length / Math.max(sourceRounds.length, 1);
+  const gain = roundToTenth(missedPerRound * Math.max(0, 35 - scramblePct) / 100 * 0.55);
+  if (gain < 0.2) return null;
+  return {
+    title: "Missed-GIR recovery",
+    detail: `You scramble ${scramblePct}% after missed greens.`,
+    gain
+  };
+}
+
+function renderPracticePriorityList(rows) {
+  if (!rows.length) return `<p class="analytics-note">Not enough logged patterns yet. Keep recording club, approach, putting, penalty, and bunker data.</p>`;
+  return `
+    <ol class="practice-priority-list">
+      ${rows.map((row) => `
+        <li>
+          <strong>${escapeHtml(row.title)}</strong>
+          <span>${escapeHtml(row.detail)}</span>
+          <em>Potential gain: ${row.gain.toFixed(1)} shots/round.</em>
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
+function scoringDistributionRows(roundMetrics) {
+  const scores = roundMetrics.map((item) => item.score).filter(Number.isFinite);
+  if (!scores.length) return [];
+  const minBand = Math.floor(Math.min(...scores) / 5) * 5;
+  const maxBand = Math.floor(Math.max(...scores) / 5) * 5;
+  const rows = [];
+  for (let start = minBand; start <= maxBand; start += 5) {
+    const end = start + 4;
+    rows.push({
+      label: `${start}-${end}`,
+      rounds: scores.filter((score) => score >= start && score <= end).length
+    });
+  }
+  return rows;
+}
+
+function renderScoringDistributionTable(rows) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Score Band</th><th>Rounds</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.rounds}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function roundConsistencyStats(roundMetrics) {
+  const scores = roundMetrics.map((item) => item.score).filter(Number.isFinite);
+  const avg = average(scores);
+  const deviation = standardDeviation(scores);
+  return {
+    average: avg.toFixed(1),
+    standardDeviation: deviation.toFixed(1),
+    label: deviation <= 2.5 ? "Very consistent" : deviation <= 4.5 ? "Consistent" : deviation <= 6.5 ? "Variable" : "Volatile"
+  };
+}
+
+function frontBackSplitStats(sourceRounds) {
+  const frontRows = [];
+  const backRows = [];
+  sourceRounds.forEach((round) => {
+    const holes = round.holes.map(normalizeHole).filter((hole) => hole.score !== null);
+    const front = holes.filter((hole) => hole.hole <= 9);
+    const back = holes.filter((hole) => hole.hole >= 10);
+    if (front.length) frontRows.push(splitMetrics(front));
+    if (back.length) backRows.push(splitMetrics(back));
+  });
+  return {
+    front: summarizeSplitRows(frontRows),
+    back: summarizeSplitRows(backRows)
+  };
+}
+
+function splitMetrics(holes) {
+  const girHoles = holes.filter((hole) => hole.gir !== null);
+  const puttHoles = holes.filter((hole) => hole.putts !== null);
+  return {
+    score: sum(holes.map((hole) => hole.score)),
+    girPct: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
+    putts: sum(puttHoles.map((hole) => hole.putts))
+  };
+}
+
+function summarizeSplitRows(rows) {
+  return {
+    score: rows.length ? average(rows.map((row) => row.score)).toFixed(1) : "—",
+    girPct: rows.length ? `${Math.round(average(rows.map((row) => row.girPct)))}%` : "—",
+    putts: rows.length ? average(rows.map((row) => row.putts)).toFixed(1) : "—"
+  };
+}
+
+function renderFrontBackTable(frontBack) {
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Metric</th><th>Front</th><th>Back</th></tr></thead>
+        <tbody>
+          <tr><td>Score</td><td>${frontBack.front.score}</td><td>${frontBack.back.score}</td></tr>
+          <tr><td>GIR</td><td>${frontBack.front.girPct}</td><td>${frontBack.back.girPct}</td></tr>
+          <tr><td>Putts</td><td>${frontBack.front.putts}</td><td>${frontBack.back.putts}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderAnalyticsOverview(filteredRounds, roundMetrics) {
@@ -2047,7 +3466,11 @@ function renderRounds() {
       const handicap = calculateScoreDifferential(round);
       return `
       <article class="round-card${countingRoundIds.has(round.id) ? " is-counting-handicap" : ""}">
-        ${countingRoundIds.has(round.id) ? `<span class="counting-handicap-badge" title="Counting handicap round">✓</span>` : ""}
+        <div class="round-status-badges">
+          ${countingRoundIds.has(round.id) ? `<span class="round-status-badge counting-handicap-badge" title="Counting handicap round">✓</span>` : ""}
+          ${round.excludeFromHandicap ? `<span class="round-status-badge excluded-handicap-badge" title="Excluded from handicap">⚑</span>` : ""}
+          ${round.excludeFromAnalysis ? `<span class="round-status-badge excluded-analysis-badge" title="Excluded from analysis">⚑</span>` : ""}
+        </div>
         <header>
           <div>
             <h2>${roundDisplayName(round)}</h2>
@@ -2063,6 +3486,8 @@ function renderRounds() {
             <button class="card-menu-button" type="button" data-round-menu="${round.id}" aria-label="Round options">...</button>
             <div class="card-menu${openRoundCardMenuId === round.id ? "" : " hidden"}">
               <button class="card-menu-item" type="button" data-export-round="${round.id}">Export round</button>
+              <button class="card-menu-item" type="button" data-toggle-analysis-exclusion="${round.id}">${round.excludeFromAnalysis ? "Include in analysis" : "Exclude from analysis"}</button>
+              <button class="card-menu-item" type="button" data-toggle-handicap-exclusion="${round.id}">${round.excludeFromHandicap ? "Include in handicap" : "Exclude from handicap"}</button>
               <button class="card-menu-item" type="button" data-edit="${round.id}">Edit</button>
               <button class="card-menu-item hole-menu-item-danger" type="button" data-delete="${round.id}">Delete</button>
             </div>
@@ -2082,8 +3507,27 @@ function renderRounds() {
     })
   );
   document.querySelectorAll("[data-export-round]").forEach((button) => button.addEventListener("click", () => exportOneRound(button.dataset.exportRound)));
+  document.querySelectorAll("[data-toggle-analysis-exclusion]").forEach((button) =>
+    button.addEventListener("click", () => toggleRoundExclusion(button.dataset.toggleAnalysisExclusion, "analysis"))
+  );
+  document.querySelectorAll("[data-toggle-handicap-exclusion]").forEach((button) =>
+    button.addEventListener("click", () => toggleRoundExclusion(button.dataset.toggleHandicapExclusion, "handicap"))
+  );
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => editRound(button.dataset.edit)));
   document.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => deleteRound(button.dataset.delete)));
+}
+
+function toggleRoundExclusion(roundId, type) {
+  rounds = rounds.map((round) => {
+    if (round.id !== roundId) return round;
+    if (type === "analysis") return normalizeRound({ ...round, excludeFromAnalysis: !round.excludeFromAnalysis });
+    return normalizeRound({ ...round, excludeFromHandicap: !round.excludeFromHandicap });
+  });
+  openRoundCardMenuId = null;
+  saveRounds();
+  renderDashboard();
+  renderAnalytics();
+  renderRounds();
 }
 
 function openRoundDetail(roundId) {
@@ -2166,7 +3610,9 @@ function openRoundStats(roundId) {
       <tr>
         <td>${hole.hole}</td>
         <td>${displayHoleScore(hole)}</td>
+        <td>${displayCellValue(hole.teeClub)}</td>
         <td>${formatFairwayCell(hole)}</td>
+        <td>${displayCellValue(hole.approachClub)}</td>
         <td>${formatApproachCell(hole)}</td>
         <td>${formatGirCell(hole)}</td>
         <td>${displayCellValue(hole.putts)}</td>
@@ -2271,6 +3717,29 @@ function drawBarChart(id, labels, data, label) {
   });
 }
 
+function drawHorizontalBarChart(id, labels, data, label) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        backgroundColor: "#041d4d"
+      }]
+    },
+    options: {
+      ...chartOptions(),
+      indexAxis: "y",
+      scales: {
+        x: axisOptions(label),
+        y: axisOptions("")
+      }
+    }
+  });
+}
+
 function drawGroupedBarChart(id, labels, datasets) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(document.getElementById(id), {
@@ -2292,6 +3761,7 @@ function renderStatCards(items) {
 }
 
 function filterLabel() {
+  if (analyticsRange === "lastX") return `Last ${analyticsRoundCount} rounds`;
   return el.analyticsRangeSelect.options[el.analyticsRangeSelect.selectedIndex]?.text || "";
 }
 
@@ -2613,11 +4083,33 @@ function renderContextGroupTable(rows, label) {
   `;
 }
 
+function renderSimpleTable(headers, rows) {
+  if (!rows.length) return `<p class="analytics-note">No data yet.</p>`;
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function formatContextLabel(value) {
   return String(value || "")
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function allScoredHoles(sourceRounds) {
+  return sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.score !== null);
+}
+
+function signedNumber(value) {
+  if (!Number.isFinite(value)) return "0.0";
+  const rounded = roundToTenth(value);
+  return rounded > 0 ? `+${rounded.toFixed(1)}` : rounded.toFixed(1);
 }
 
 function correl(xs, ys) {
@@ -2740,6 +4232,8 @@ function buildRoundsCsv(sourceRounds) {
     "date",
     "course",
     "round_format",
+    "excluded_from_analysis",
+    "excluded_from_handicap",
     "score_differential",
     "adjusted_gross_score",
     "course_rating",
@@ -2751,7 +4245,7 @@ function buildRoundsCsv(sourceRounds) {
     "food",
     "round_notes",
     "hole",
-    "club_used",
+    "tee_club",
     "par",
     "score",
     "pickedUp",
@@ -2761,7 +4255,7 @@ function buildRoundsCsv(sourceRounds) {
     "approachHit",
     "approachMiss",
     "approachDistance",
-    "approachClub",
+    "approach_club",
     "chips",
     "chipTypes",
     "fairwayBunker",
@@ -2780,6 +4274,8 @@ function buildRoundsCsv(sourceRounds) {
       round.date,
       round.course,
       round.formatLabel,
+      Boolean(round.excludeFromAnalysis),
+      Boolean(round.excludeFromHandicap),
       handicap.differential,
       handicap.adjustedGrossScore,
       handicap.courseRating,
@@ -2824,6 +4320,8 @@ function formatRoundText(round) {
     `Date: ${round.date}`,
     `Score: ${totalScore(round)} (${formatRelative(totalScore(round), totalPar(round))})`,
     `Par: ${totalPar(round)}`,
+    `Excluded from analysis: ${round.excludeFromAnalysis ? "Yes" : "No"}`,
+    `Excluded from handicap: ${round.excludeFromHandicap ? "Yes" : "No"}`,
     `Score differential: ${formatDifferential(handicap.differential)}`,
     `Adjusted gross score: ${displayCellValue(handicap.adjustedGrossScore)}`,
     `Course rating: ${displayCellValue(handicap.courseRating)}`,
@@ -3138,7 +4636,7 @@ function calculateScoreDifferential(round) {
 }
 
 function calculateHandicapLedger(sourceRounds = rounds) {
-  const scored = sourceRounds
+  const scored = handicapEligibleRounds(sourceRounds)
     .filter(hasRoundScore)
     .map((round, index) => ({ round, index, handicap: calculateScoreDifferential(round) }))
     .filter((item) => item.handicap.differential !== null)
@@ -3244,6 +4742,14 @@ function average(values) {
   return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
 }
 
+function standardDeviation(values) {
+  const clean = values.filter((value) => Number.isFinite(value));
+  if (!clean.length) return 0;
+  const avg = average(clean);
+  const variance = average(clean.map((value) => (value - avg) ** 2));
+  return Math.sqrt(variance);
+}
+
 function inBucket(value, bucket) {
   return typeof value === "number" && value >= bucket.min && value < bucket.max;
 }
@@ -3284,6 +4790,8 @@ function normalizeRound(round) {
     ...round,
     formatId,
     formatLabel: getRoundFormat(formatId).label,
+    excludeFromAnalysis: Boolean(round.excludeFromAnalysis),
+    excludeFromHandicap: Boolean(round.excludeFromHandicap),
     context: normalizeRoundContext(round.context),
     holes: (round.holes || []).map(normalizeHole)
   };
@@ -3345,7 +4853,7 @@ function normalizeHole(hole) {
     length: hole.length ?? null,
     pickedUp: Boolean(hole.pickedUp),
     pickedUpManual: Boolean(hole.pickedUpManual ?? hole.pickedUp),
-    teeClub: hole.teeClub ?? null,
+    teeClub: hole.teeClub ?? hole.clubUsed ?? null,
     fairway: hole.fairway ?? hole.fir ?? null,
     fairwayMiss: hole.fairwayMiss ?? null,
     approachHit: hole.approachHit ?? null,

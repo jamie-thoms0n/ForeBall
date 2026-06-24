@@ -424,25 +424,35 @@
               <div>
                 <label for="analyticsRangeSelect">Range</label>
                 <select id="analyticsRangeSelect">
-                  <option value="last20" selected>Last 20 rounds</option>
+                  <option value="lastX" selected>Last X rounds</option>
                   <option value="all">All time</option>
                   <option value="ytd">YTD</option>
                   <option value="calendarYear">Calendar year</option>
+                  <option value="sixMonths">6 Months</option>
                   <option value="threeMonths">3 Months</option>
                   <option value="month">Month</option>
                   <option value="week">Week</option>
                 </select>
               </div>
-            </div>
-            <div class="analytics-subtabs" aria-label="Analytics sections">
-              <button class="analytics-subtab is-active" type="button" data-analytics-tab="overview">Overview</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="drivers">Scoring Drivers</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="ballStriking">Ball Striking</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="shortGame">Short Game</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="putting">Putting</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="conditions">Conditions</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="trends">Trends</button>
-              <button class="analytics-subtab" type="button" data-analytics-tab="comparisons">Comparisons</button>
+              <div id="analyticsRoundCountWrap">
+                <label for="analyticsRoundCountSelect">Rounds</label>
+                <select id="analyticsRoundCountSelect"></select>
+              </div>
+              <div>
+                <label for="analyticsSectionSelect">Analysis section</label>
+                <select id="analyticsSectionSelect">
+                  <option value="performanceOverview" selected>Performance Overview</option>
+                  <option value="strokesLost">Strokes Lost Analysis</option>
+                  <option value="driving">Driving</option>
+                  <option value="approachPlay">Approach Play</option>
+                  <option value="shortGame">Short Game</option>
+                  <option value="putting">Putting</option>
+                  <option value="scoringAnalysis">Scoring Analysis</option>
+                  <option value="situationalAnalysis">Situational Analysis</option>
+                  <option value="trends">Trends</option>
+                  <option value="practicePriorities">Practice Priorities</option>
+                </select>
+              </div>
             </div>
           </div>
           <div id="analyticsContent"></div>
@@ -534,7 +544,9 @@
                     <tr>
                       <th>Hole</th>
                       <th>Score</th>
+                      <th>Tee club</th>
                       <th>Fairway</th>
+                      <th>Approach club</th>
                       <th>Approach</th>
                       <th>GIR</th>
                       <th>Putts</th>
@@ -567,6 +579,6 @@
     </div>
 
     <script src="chart.local.js"></script>
-    <script src="app.js?v=20260623-handicap"></script>
+    <script src="app.js?v=20260624-round-exclusions"></script>
   </body>
 </html>

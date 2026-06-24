@@ -1195,9 +1195,122 @@ h2 {
   align-items: end;
 }
 
+.analytics-page-title {
+  display: grid;
+  gap: 4px;
+}
+
+.analytics-page-title h2 {
+  font-size: 1.45rem;
+}
+
 .analytics-note {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.performance-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.decision-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.decision-list strong {
+  color: var(--text);
+}
+
+.miss-heatmap {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.miss-heatmap-cell {
+  min-height: 86px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(99, 209, 31, var(--heat));
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 10px;
+  text-align: center;
+  font-weight: 900;
+}
+
+.miss-heatmap-cell strong {
+  font-size: 1.35rem;
+}
+
+.miss-bias-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.miss-bias-card {
+  min-height: 118px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 12px;
+  text-align: center;
+  font-weight: 900;
+}
+
+.miss-bias-arrow {
+  color: var(--accent-2);
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.miss-bias-card strong {
+  font-size: 1.45rem;
+}
+
+.practice-priority-list {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-left: 24px;
+}
+
+.practice-priority-list li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.practice-priority-list strong,
+.practice-priority-list span,
+.practice-priority-list em {
+  display: block;
+}
+
+.practice-priority-list span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.practice-priority-list em {
+  margin-top: 6px;
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 900;
 }
 
 .dashboard-hero {
@@ -1279,14 +1392,19 @@ canvas {
   border-color: rgba(99, 209, 31, 0.75);
 }
 
-.counting-handicap-badge {
+.round-status-badges {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  gap: 5px;
+  z-index: 1;
+}
+
+.round-status-badge {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--accent-2);
   color: #fff;
   display: grid;
   place-items: center;
@@ -1295,11 +1413,23 @@ canvas {
   box-shadow: 0 2px 8px rgba(4, 29, 77, 0.12);
 }
 
+.counting-handicap-badge {
+  background: var(--accent-2);
+}
+
+.excluded-handicap-badge {
+  background: var(--danger);
+}
+
+.excluded-analysis-badge {
+  background: #d58b2d;
+}
+
 .round-card header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  padding-right: 26px;
+  padding-right: 88px;
   margin-bottom: 10px;
 }
 
@@ -1523,6 +1653,11 @@ canvas {
   }
 
   .club-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .miss-heatmap,
+  .miss-bias-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
