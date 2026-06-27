@@ -413,7 +413,17 @@
             </div>
             <fieldset>
               <legend>Food during round</legend>
-              <button class="secondary-action" type="button" id="addFoodBtn">Add food</button>
+              <div class="food-add-row">
+                <div>
+                  <label for="foodNameInput">Food</label>
+                  <input id="foodNameInput" type="text" placeholder="Banana, bar, sandwich">
+                </div>
+                <div>
+                  <label for="foodHolesInput">Holes</label>
+                  <input id="foodHolesInput" type="text" placeholder="3, 7, 12">
+                </div>
+                <button class="secondary-action" type="button" id="addFoodBtn">Add</button>
+              </div>
               <div id="foodEntries" class="food-entry-list"></div>
             </fieldset>
             <div>
@@ -495,6 +505,7 @@
                 <div>
                   <h2 id="roundDetailTitle">Round Overview</h2>
                   <p id="roundDetailMeta"></p>
+                  <p class="round-detail-notes hidden" id="roundDetailNotes"></p>
                 </div>
                 <button class="secondary-action round-detail-stats" type="button" id="roundDetailStatsBtn">View round</button>
                 <div class="round-detail-summary">
@@ -589,6 +600,6 @@
     </div>
 
     <script src="chart.local.js"></script>
-    <script src="app.js?v=20260627-food-ui-summary"></script>
+    <script src="app.js?v=20260627-approach-efficiency"></script>
   </body>
 </html>

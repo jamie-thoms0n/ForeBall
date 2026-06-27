@@ -656,6 +656,7 @@ h2 {
 }
 
 .conditions-grid,
+.food-add-row,
 .food-entry {
   display: grid;
   gap: 12px;
@@ -665,6 +666,11 @@ h2 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.food-add-row {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) auto;
+  align-items: end;
+}
+
 .food-entry-list {
   display: grid;
   gap: 10px;
@@ -672,8 +678,8 @@ h2 {
 }
 
 .food-entry {
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -682,22 +688,27 @@ h2 {
 }
 
 .food-entry-header {
-  grid-column: 1 / -1;
-  padding: 8px 10px;
-  border: 1px solid #d4dde8;
-  border-radius: 8px;
-  background: #e2e8f0;
+  padding: 0;
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: 0.95rem;
   font-weight: 900;
 }
 
-.food-entry input {
-  background: #fff;
+.food-entry-detail {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.food-empty-note {
+  margin: 0;
 }
 
 .food-remove {
-  align-self: end;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .bunker-expand-panel {
@@ -1543,6 +1554,18 @@ canvas {
   margin-top: 4px;
 }
 
+.round-detail-notes {
+  max-width: 100%;
+  margin-top: 8px !important;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text) !important;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .round-detail-back {
   width: auto;
   min-width: 72px;
@@ -1754,6 +1777,7 @@ canvas {
   .profile-goal-grid,
   .wedge-entry-row,
   .followup-row,
+  .food-add-row,
   .penalty-count-grid,
   .difficulty-ranking-grid,
   .approach-gir-row {
