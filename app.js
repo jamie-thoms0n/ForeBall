@@ -167,7 +167,7 @@ const PUTT_BUCKETS = [
 
 const PENALTY_PRESETS = {
   threeOffTee: 2,
-  lostBall: 1,
+  lostBall: 2,
   ob: 1
 };
 
@@ -379,6 +379,7 @@ const el = {
   otherBunkerWrap: document.getElementById("otherBunkerWrap"),
   otherBunkerSelect: document.getElementById("otherBunkerSelect"),
   penaltyButtons: Array.from(document.querySelectorAll(".penalty-button")),
+  penaltyCountFields: document.getElementById("penaltyCountFields"),
   otherPenaltyWrap: document.getElementById("otherPenaltyWrap"),
   otherPenaltySelect: document.getElementById("otherPenaltySelect"),
   penaltySummary: document.getElementById("penaltySummary"),
@@ -430,6 +431,7 @@ function init() {
   populateCourses();
   populateAnalyticsRoundCounts();
   seedLocalDemoRounds();
+  persistNormalizedCauseData();
   renderProfile();
   bindEvents();
   updateResumeButton();
@@ -442,6 +444,15 @@ function init() {
     }
   });
   registerServiceWorker();
+}
+
+function persistNormalizedCauseData() {
+  rounds = rounds.map(normalizeRound);
+  saveRounds();
+  if (activeRound) {
+    activeRound = normalizeRound(activeRound);
+    persistActiveRound();
+  }
 }
 
 function bindEvents() {
@@ -990,7 +1001,9 @@ function createRoundState(course, formatId = "18", tee = null) {
         fairwayBunkerEntryMode: null,
         greensideBunker: null,
         bunkerEntryMode: null,
+        penalties: {},
         penaltyType: null,
+        penaltyOtherStrokes: null,
         penaltyStrokes: null,
         puttsEntryMode: null,
         putts: null,
@@ -1142,7 +1155,8 @@ function buildDemoHole(hole, index, score, fairwayResult, gir) {
     greensideBunker,
     bunkerEntryMode: greensideBunker === null ? null : "preset",
     penaltyType,
-    penaltyStrokes: penaltyType ? 1 : null,
+    penaltyOtherStrokes: null,
+    penaltyStrokes: penaltyType ? PENALTY_PRESETS[penaltyType] : null,
     puttsEntryMode: "preset",
     putts,
     puttDistances: demoPuttDistances(putts, index)
@@ -1224,7 +1238,7 @@ function showHole() {
   el.fairwayBunkerPanel.classList.add("hidden");
   renderFairwayBunkerUi(hole.fairwayBunker, hole.fairwayBunkerEntryMode);
   renderBunkerUi(hole.greensideBunker, hole.bunkerEntryMode);
-  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
+  updatePenaltyUi(hole.penalties, hole.penaltyStrokes);
   el.prevHoleBtn.disabled = currentHoleIndex === 0;
   el.topPrevHoleBtn.disabled = currentHoleIndex === 0;
   el.prevHoleBtn.classList.toggle("hidden", currentHoleIndex === 0);
@@ -1265,6 +1279,7 @@ function renderFoodEntries(entries) {
   el.foodEntries.innerHTML = entries
     .map((entry, index) => `
       <div class="food-entry" data-food-entry>
+        <div class="food-entry-header" data-food-summary>${foodEntrySummary(entry, index)}</div>
         <div>
           <label for="foodName${index}">Food</label>
           <input id="foodName${index}" data-food-name type="text" value="${escapeAttr(entry.name || "")}" placeholder="Banana, bar, sandwich">
@@ -1284,7 +1299,29 @@ function renderFoodEntries(entries) {
       saveRoundContext();
     });
   });
-  el.foodEntries.querySelectorAll("input").forEach((input) => input.addEventListener("input", saveRoundContext));
+  el.foodEntries.querySelectorAll("input").forEach((input) => input.addEventListener("input", () => {
+    updateFoodEntrySummaries();
+    saveRoundContext();
+  }));
+}
+
+function updateFoodEntrySummaries() {
+  el.foodEntries.querySelectorAll("[data-food-entry]").forEach((row, index) => {
+    const summary = row.querySelector("[data-food-summary]");
+    if (!summary) return;
+    summary.textContent = foodEntrySummary({
+      name: row.querySelector("[data-food-name]")?.value.trim(),
+      holes: parseHoleList(row.querySelector("[data-food-holes]")?.value)
+    }, index);
+  });
+}
+
+function foodEntrySummary(entry, index) {
+  const name = entry.name?.trim();
+  const holes = Array.isArray(entry.holes) ? entry.holes : [];
+  if (!name && !holes.length) return `Food item ${index + 1}`;
+  const holeText = holes.length ? ` · holes ${formatHoleList(holes)}` : "";
+  return `Added: ${name || "Food"}${holeText}`;
 }
 
 function addFoodEntry(entry = { name: "", holes: [] }) {
@@ -1348,11 +1385,15 @@ function saveCurrentHole() {
     fairwayBunkerEntryMode: hole.fairwayBunkerEntryMode ?? null,
     greensideBunker: hole.greensideBunker ?? null,
     bunkerEntryMode: hole.bunkerEntryMode ?? null,
+    penalties: normalizePenaltyCounts(hole.penalties, hole),
+    penaltyType: hole.penaltyType ?? null,
+    penaltyOtherStrokes: hole.penaltyOtherStrokes ?? null,
+    penaltyStrokes: hole.penaltyStrokes ?? null,
     puttsEntryMode: hole.puttsEntryMode ?? null,
     putts,
     puttDistances: putts === null ? [] : puttDistances.slice(0, putts)
   };
-  activeRound.holes[currentHoleIndex] = nextHole;
+  activeRound.holes[currentHoleIndex] = normalizeHole(nextHole);
   activeRound.currentHoleIndex = currentHoleIndex;
   persistActiveRound();
   return true;
@@ -1560,7 +1601,9 @@ function clearHoleValues(hole) {
   hole.bunkerEntryMode = null;
   hole.putts = null;
   hole.puttDistances = [];
+  hole.penalties = {};
   hole.penaltyType = null;
+  hole.penaltyOtherStrokes = null;
   hole.penaltyStrokes = null;
 }
 
@@ -1710,10 +1753,12 @@ function renderPuttUi(putts, distances = [], entryMode = null) {
 
 function confirmPuttDistanceOrder() {
   const distances = Array.from(document.querySelectorAll(".putt-distance-input")).map((input) => numberOrNull(input.value));
-  const first = distances[0];
-  const second = distances[1];
-  if (!Number.isFinite(first) || !Number.isFinite(second) || first >= second) return true;
-  return window.confirm("Putt 1 is shorter than Putt 2. Is that definitely correct?");
+  const invalidIndex = distances.findIndex((distance, index) => {
+    const next = distances[index + 1];
+    return Number.isFinite(distance) && Number.isFinite(next) && distance < next;
+  });
+  if (invalidIndex === -1) return true;
+  return window.confirm(`Putt ${invalidIndex + 1} is shorter than putt ${invalidIndex + 2}. Is that definitely correct?`);
 }
 
 function handleChipChoice(choice) {
@@ -1923,39 +1968,93 @@ function handleGirChange() {
 function handlePenaltySelect(type) {
   if (!activeRound) return;
   const hole = currentHole();
-  if (hole.penaltyType === type) {
-    hole.penaltyType = null;
-    hole.penaltyStrokes = null;
+  const penalties = normalizePenaltyCounts(hole.penalties, hole);
+  if (penalties[type]) {
+    delete penalties[type];
   } else {
-    hole.penaltyType = type;
-    hole.penaltyStrokes = type === "other" ? numberOrNull(el.otherPenaltySelect.value) : PENALTY_PRESETS[type];
+    penalties[type] = 1;
   }
-  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
+  applyPenaltyCountsToHole(hole, penalties);
+  updatePenaltyUi(hole.penalties, hole.penaltyStrokes);
   persistActiveRound();
 }
 
 function handleOtherPenaltyChange() {
   if (!activeRound) return;
   const hole = currentHole();
-  if (hole.penaltyType !== "other") return;
-  hole.penaltyStrokes = numberOrNull(el.otherPenaltySelect.value);
-  updatePenaltyUi(hole.penaltyType, hole.penaltyStrokes);
+  const penalties = normalizePenaltyCounts(hole.penalties, hole);
+  if (!penalties.other) return;
+  hole.penaltyOtherStrokes = numberOrNull(el.otherPenaltySelect.value) || 1;
+  applyPenaltyCountsToHole(hole, penalties);
+  updatePenaltyUi(hole.penalties, hole.penaltyStrokes);
   persistActiveRound();
 }
 
-function updatePenaltyUi(type, strokes) {
+function handlePenaltyCountChange(type, value) {
+  if (!activeRound) return;
+  const hole = currentHole();
+  const penalties = normalizePenaltyCounts(hole.penalties, hole);
+  if (!penalties[type]) return;
+  penalties[type] = Math.max(1, Math.min(3, Number(value) || 1));
+  applyPenaltyCountsToHole(hole, penalties);
+  updatePenaltyUi(hole.penalties, hole.penaltyStrokes);
+  persistActiveRound();
+}
+
+function updatePenaltyUi(penaltiesInput, strokes) {
+  const penalties = normalizePenaltyCounts(penaltiesInput);
   el.penaltyButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.penaltyType === type);
+    button.classList.toggle("is-active", Boolean(penalties[button.dataset.penaltyType]));
   });
-  el.otherPenaltyWrap.classList.toggle("hidden", type !== "other");
-  el.otherPenaltySelect.value = type === "other" && strokes !== null ? String(strokes) : "";
-  el.penaltySummary.classList.toggle("hidden", !type);
-  if (!type) {
+  const selectedEntries = Object.entries(penalties);
+  el.penaltyCountFields.classList.toggle("hidden", !selectedEntries.length);
+  el.penaltyCountFields.innerHTML = selectedEntries.map(([type, count]) => `
+    <div>
+      <label for="penaltyCount-${type}">${penaltyLabel(type)} count</label>
+      <select id="penaltyCount-${type}" data-penalty-count-type="${type}">
+        <option value="1" ${count === 1 ? "selected" : ""}>1</option>
+        <option value="2" ${count === 2 ? "selected" : ""}>2</option>
+        <option value="3" ${count === 3 ? "selected" : ""}>3</option>
+      </select>
+    </div>
+  `).join("");
+  el.penaltyCountFields.querySelectorAll("[data-penalty-count-type]").forEach((select) => {
+    select.addEventListener("change", () => handlePenaltyCountChange(select.dataset.penaltyCountType, select.value));
+  });
+  el.otherPenaltyWrap.classList.toggle("hidden", !penalties.other);
+  el.otherPenaltySelect.value = penalties.other ? currentHole()?.penaltyOtherStrokes ?? "" : "";
+  el.penaltySummary.classList.toggle("hidden", !selectedEntries.length);
+  if (!selectedEntries.length) {
     el.penaltySummary.textContent = "";
     return;
   }
-  const label = type === "threeOffTee" ? "3 off the tee" : type === "lostBall" ? "Lost Ball" : type === "ob" ? "OB" : "Other";
-  el.penaltySummary.textContent = strokes === null ? `${label}` : `${label}: ${strokes}`;
+  el.penaltySummary.textContent = selectedEntries
+    .map(([type, count]) => `${penaltyLabel(type)} x${count}`)
+    .join(" · ") + ` · ${strokes || 0} shots`;
+}
+
+function normalizePenaltyCounts(penalties, hole = {}) {
+  if (penalties && typeof penalties === "object" && !Array.isArray(penalties)) {
+    return Object.fromEntries(Object.entries(penalties).map(([type, count]) => [type, Math.max(1, Math.min(3, Number(count) || 1))]));
+  }
+  if (hole.penaltyType) return { [hole.penaltyType]: 1 };
+  return {};
+}
+
+function applyPenaltyCountsToHole(hole, penalties) {
+  hole.penalties = normalizePenaltyCounts(penalties);
+  const selectedTypes = Object.keys(hole.penalties);
+  hole.penaltyType = selectedTypes.join("|") || null;
+  hole.penaltyStrokes = selectedTypes.reduce((total, type) => total + penaltyShotValue(type, hole) * hole.penalties[type], 0) || null;
+}
+
+function penaltyShotValue(type, hole = currentHole()) {
+  if (type === "other") return hole?.penaltyOtherStrokes ?? numberOrNull(el.otherPenaltySelect.value) ?? 1;
+  return PENALTY_PRESETS[type] || 1;
+}
+
+function penaltyLabel(type) {
+  return type === "threeOffTee" ? "3 off the tee" : type === "lostBall" ? "Lost Ball" : type === "ob" ? "OB" : "Other";
 }
 
 function renderDashboard() {
@@ -1969,21 +2068,21 @@ function renderDashboard() {
   const childrensHandicap = childrensHandicapLedger.at(-1)?.handicapIndex ?? null;
 
   el.dashboardStats.innerHTML = [
-    ["Completed rounds", rounds.length],
-    ["Scoring average", scoredRounds.length ? average(scoredRounds.map(adjustedRoundScore)).toFixed(1) : "0.0"],
-    ["Handicap index", formatHandicapIndex(currentHandicap)],
-    ["Children's Course handicap", formatHandicapIndex(childrensHandicap)],
+    ["Score ave", scoredRounds.length ? average(scoredRounds.map(adjustedRoundScore)).toFixed(1) : "0.0"],
     ["Played last 7 days", recent7],
+    ["HCP index", formatHandicapIndex(currentHandicap)],
+    ["Kids course index", formatHandicapIndex(childrensHandicap)],
+    ["Completed rounds", rounds.length],
     ["Active round", activeRoundLabel]
   ]
     .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
 
   el.dashboardRecent.innerHTML = [
-    ["Last 7 days", `${recent7} rounds`],
-    ["Last 30 days", `${recent30} rounds`],
+    ["Best score", bestScoreLabel()],
     ["Most recent round", mostRecentRoundLabel()],
-    ["Best score", bestScoreLabel()]
+    ["Last 7 days", `${recent7} rounds`],
+    ["Last 30 days", `${recent30} rounds`]
   ]
     .map(([label, value]) => `<div class="dashboard-mini-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
@@ -2157,7 +2256,7 @@ function renderPerformanceOverview(filteredRounds, roundMetrics) {
       <div class="stats-grid performance-overview-grid">
         ${renderStatCards([
           ["Handicap Trend", formatHandicapIndex(currentHandicap)],
-          ["Average Score", average(roundMetrics.map((item) => item.score)).toFixed(1)],
+          ["Average vs Par", signedNumber(average(roundMetrics.map((item) => item.overPar)))],
           ["Best Score", Math.min(...roundMetrics.map((item) => item.score))],
           ["Rounds Played", filteredRounds.length],
           ["FIR %", `${pct(sum(roundMetrics.map((item) => item.firCount)), fairwayAttempts)}%`],
@@ -2183,7 +2282,7 @@ function renderPerformanceOverview(filteredRounds, roundMetrics) {
         </div>
         <div class="stats-grid">
           ${renderStatCards([
-            ["Average Score", consistency.average],
+            ["Average vs Par", consistency.average],
             ["Standard Deviation", consistency.standardDeviation],
             ["Consistency", consistency.label]
           ])}
@@ -2253,10 +2352,10 @@ function renderStrokesLostAnalysis(filteredRounds, roundMetrics) {
       </div>
       <div class="panel">
         <div class="analytics-section-header">
-          <h2>Double Bogey Causes</h2>
-          <span class="analytics-note">Causes tracked on every double bogey or worse hole</span>
+          <h2>Double Bogey Cause Attribution</h2>
+          <span class="analytics-note">Primary causes are the first major error; secondary causes are later problems on the same hole</span>
         </div>
-        ${renderCauseTable(doubleCauses)}
+        ${renderCauseAttributionTables(doubleCauses)}
       </div>
       <div class="panel">
         <div class="analytics-section-header">
@@ -2325,33 +2424,29 @@ function renderStrokesLostTable(rows) {
 }
 
 function doubleBogeyCauseRows(sourceRounds) {
-  const counts = new Map([
-    ["Penalty", 0],
-    ["3 putt", 0],
-    ["Missed approach", 0],
-    ["Bunker", 0],
-    ["Tee miss right", 0]
-  ]);
-  sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).forEach((hole) => {
-    if (hole.score === null || hole.score - hole.par < 2) return;
-    if ((hole.penaltyStrokes || 0) > 0) counts.set("Penalty", counts.get("Penalty") + 1);
-    if (hole.putts !== null && hole.putts >= 3) counts.set("3 putt", counts.get("3 putt") + 1);
-    if (hole.approachHit === false || hole.gir === false) counts.set("Missed approach", counts.get("Missed approach") + 1);
-    if ((hole.greensideBunker || 0) > 0 || (hole.fairwayBunker || 0) > 0) counts.set("Bunker", counts.get("Bunker") + 1);
-    if (["push", "overFade", "slice", "right", "rightOther"].includes(hole.fairwayMiss)) counts.set("Tee miss right", counts.get("Tee miss right") + 1);
-  });
-  return Array.from(counts.entries()).map(([cause, count]) => ({ cause, count })).sort((a, b) => b.count - a.count);
+  return causeAttributionRows(
+    sourceRounds.flatMap((round) => round.holes.map(normalizeHole)).filter((hole) => hole.score !== null && hole.score - hole.par >= 2)
+  );
+}
+
+function renderCauseAttributionTables(summary) {
+  return `
+    <div class="difficulty-ranking-grid">
+      <div>
+        <h3>Primary</h3>
+        ${renderCauseTable(summary.primary)}
+      </div>
+      <div>
+        <h3>Secondary</h3>
+        ${renderCauseTable(summary.secondary)}
+      </div>
+    </div>
+  `;
 }
 
 function renderCauseTable(rows) {
-  return `
-    <div class="analytics-table-wrap">
-      <table class="analytics-table">
-        <thead><tr><th>Cause</th><th>Count</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.cause}</td><td>${row.count}</td></tr>`).join("")}</tbody>
-      </table>
-    </div>
-  `;
+  if (!rows.length) return `<p class="analytics-note">No causes logged yet.</p>`;
+  return renderSimpleTable(["Cause", "Count"], rows.map((row) => [row.cause, row.count]));
 }
 
 function birdieOpportunityStats(sourceRounds) {
@@ -2384,7 +2479,7 @@ function renderDrivingAnalysis(filteredRounds) {
       <div class="chart-panel">
         <div class="analytics-section-header">
           <h2>Tee Club Decision Matrix</h2>
-          <span class="analytics-note">Average score by tee club</span>
+          <span class="analytics-note">Average score relative to par by tee club</span>
         </div>
         <div class="chart-wrap"><canvas id="drivingDecisionChart"></canvas></div>
         ${renderDecisionMatrix(clubRows)}
@@ -2412,7 +2507,7 @@ function renderDrivingAnalysis(filteredRounds) {
       </div>
     </div>
   `;
-  drawBarChart("drivingDecisionChart", clubRows.map((row) => row.club), clubRows.map((row) => Number(row.avgScore)), "Avg Score");
+  drawBarChart("drivingDecisionChart", clubRows.map((row) => row.club), clubRows.map((row) => row.avgVsPar), "Avg vs par");
   drawBarChart("drivingPenaltyRiskChart", clubRows.map((row) => row.club), clubRows.map((row) => row.penaltyRisk), "Penalty Risk %");
 }
 
@@ -2431,7 +2526,7 @@ function drivingClubRows(sourceRounds) {
     return {
       club,
       uses,
-      avgScore: average(holes.map((hole) => hole.score)).toFixed(1),
+      avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0,
       fir: pct(fairwayAttempts.filter((hole) => hole.fairway).length, fairwayAttempts.length),
       penalties,
       missPct: pct(misses, fairwayAttempts.length),
@@ -2451,8 +2546,8 @@ function renderDrivingClubTable(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Club</th><th>Uses</th><th>Avg Score</th><th>FIR</th><th>Penalties</th><th>Miss %</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.uses}</td><td>${row.avgScore}</td><td>${row.fir}%</td><td>${row.penalties}</td><td>${row.missPct}%</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Club</th><th>Uses</th><th>Avg vs Par</th><th>FIR</th><th>Penalties</th><th>Miss %</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.uses}</td><td>${signedNumber(row.avgVsPar)}</td><td>${row.fir}%</td><td>${row.penalties}</td><td>${row.missPct}%</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2462,7 +2557,7 @@ function renderDecisionMatrix(rows) {
   if (!rows.length) return `<p class="analytics-note">No tee club data yet.</p>`;
   return `
     <div class="decision-list">
-      ${rows.map((row) => `<div><strong>${escapeHtml(row.club)}</strong> average score: ${row.avgScore}</div>`).join("")}
+      ${rows.map((row) => `<div><strong>${escapeHtml(row.club)}</strong> avg vs par: ${signedNumber(row.avgVsPar)}</div>`).join("")}
     </div>
   `;
 }
@@ -2479,8 +2574,8 @@ function drivingMissSeverityRows(sourceRounds) {
     miss,
     label: formatMissLabel(miss),
     count: holes.length,
-    avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
-  })).sort((a, b) => Number(b.avgScore) - Number(a.avgScore));
+    avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0
+  })).sort((a, b) => b.avgVsPar - a.avgVsPar);
 }
 
 function renderMissSeverityTable(rows) {
@@ -2488,8 +2583,8 @@ function renderMissSeverityTable(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Miss</th><th>Count</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Miss</th><th>Count</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2558,7 +2653,7 @@ function renderApproachPlayAnalysis(filteredRounds) {
       <div class="panel">
         <div class="analytics-section-header">
           <h2>Approach Cost Matrix</h2>
-          <span class="analytics-note">Average score by approach outcome</span>
+          <span class="analytics-note">Average score relative to par by approach outcome</span>
         </div>
         ${renderApproachCostMatrix(costRows)}
       </div>
@@ -2621,7 +2716,10 @@ function approachDistanceRows(sourceRounds) {
       distance: bucket.label,
       attempts: bucketHoles.length,
       gir: pct(bucketHoles.filter((hole) => hole.gir).length, bucketHoles.filter((hole) => hole.gir !== null).length),
-      avgScore: average(bucketHoles.map((hole) => hole.score)).toFixed(1)
+      hitPct: pct(bucketHoles.filter((hole) => hole.approachHit).length, bucketHoles.filter((hole) => hole.approachHit !== null).length),
+      avgVsPar: roundToTenth(average(bucketHoles.map((hole) => hole.score - hole.par))) ?? 0,
+      hitVsPar: scoreVsParForHoles(bucketHoles.filter((hole) => hole.approachHit === true)),
+      missedVsPar: scoreVsParForHoles(bucketHoles.filter((hole) => hole.approachHit === false))
     };
   });
 }
@@ -2630,11 +2728,15 @@ function renderApproachDistanceMatrix(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Distance</th><th>Attempts</th><th>GIR</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.distance}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Distance</th><th>Attempts</th><th>GIR</th><th>Approach Hit %</th><th>Avg vs Par</th><th>Vs Par When Hit</th><th>Vs Par When Missed</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.distance}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.hitPct}%</td><td>${signedNumber(row.avgVsPar)}</td><td>${row.hitVsPar}</td><td>${row.missedVsPar}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
+}
+
+function scoreVsParForHoles(holes) {
+  return holes.length ? signedNumber(average(holes.map((hole) => hole.score - hole.par))) : "-";
 }
 
 function approachClubRows(sourceRounds) {
@@ -2653,9 +2755,10 @@ function approachClubRows(sourceRounds) {
       club,
       attempts,
       gir: pct(girHoles.filter((hole) => hole.gir).length, girHoles.length),
+      hitPct: pct(holes.filter((hole) => hole.approachHit).length, holes.filter((hole) => hole.approachHit !== null).length),
       missShort: pct(missShort, attempts),
       missLong: pct(missLong, attempts),
-      avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0
     };
   }).sort((a, b) => b.attempts - a.attempts);
 }
@@ -2665,8 +2768,8 @@ function renderApproachClubMatrix(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Club</th><th>Attempts</th><th>GIR</th><th>Miss Short</th><th>Miss Long</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.missShort}%</td><td>${row.missLong}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Club</th><th>Attempts</th><th>GIR</th><th>Approach Hit %</th><th>Miss Short</th><th>Miss Long</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.club)}</td><td>${row.attempts}</td><td>${row.gir}%</td><td>${row.hitPct}%</td><td>${row.missShort}%</td><td>${row.missLong}%</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2713,7 +2816,7 @@ function approachCostRows(sourceRounds) {
   return rows.map((row) => ({
     result: row.result,
     attempts: row.holes.length,
-    avgScore: average(row.holes.map((hole) => hole.score)).toFixed(1)
+    avgVsPar: roundToTenth(average(row.holes.map((hole) => hole.score - hole.par))) ?? 0
   }));
 }
 
@@ -2721,8 +2824,8 @@ function renderApproachCostMatrix(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Result</th><th>Attempts</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.result}</td><td>${row.attempts}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Result</th><th>Attempts</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.result}</td><td>${row.attempts}</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2733,6 +2836,7 @@ function renderShortGameAnalysis(filteredRounds) {
   const upDownRows = upAndDownByChipTypeRows(filteredRounds);
   const missedGir = missedGirFinishStats(filteredRounds);
   const sand = sandSaveStats(filteredRounds);
+  const bunkerLeaves = bunkerLeaveStats(filteredRounds);
   const recovery = missedFairwayRecoveryStats(filteredRounds);
   const shortGameScoreRows = shortGameScoreFactorRows(filteredRounds);
   el.analyticsContent.innerHTML = `
@@ -2776,9 +2880,11 @@ function renderShortGameAnalysis(filteredRounds) {
           ${renderStatCards([
             ["Bunker holes", sand.bunkerHoles],
             ["Saved par", sand.savedPar],
-            ["Sand save %", `${sand.savePct}%`]
+            ["Sand save %", `${sand.savePct}%`],
+            ["Avg leave", bunkerLeaves.averageLeave]
           ])}
         </div>
+        ${renderBunkerLeaveTable(bunkerLeaves.rows)}
       </div>
       <div class="panel">
         <div class="analytics-section-header">
@@ -2815,8 +2921,7 @@ function shortGameScoreFactorRows(sourceRounds) {
     .map((item) => ({
       category: item.category,
       attempts: item.holes.length,
-      avgVsPar: roundToTenth(average(item.holes.map((hole) => hole.score - hole.par))) ?? 0,
-      avgScore: average(item.holes.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(item.holes.map((hole) => hole.score - hole.par))) ?? 0
     }))
     .filter((row) => row.attempts > 0)
     .sort((a, b) => b.avgVsPar - a.avgVsPar);
@@ -2864,7 +2969,7 @@ function upAndDownByChipTypeRows(sourceRounds) {
       type: label,
       attempts: matching.length,
       upDownPct: pct(matching.filter(isScrambleSuccess).length, matching.length),
-      avgScore: average(matching.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(matching.map((hole) => hole.score - hole.par))) ?? 0
     };
   });
 }
@@ -2873,8 +2978,8 @@ function renderUpAndDownTable(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Chip Type</th><th>Attempts</th><th>Up-and-Down %</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.type}</td><td>${row.attempts}</td><td>${row.upDownPct}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Chip Type</th><th>Attempts</th><th>Up-and-Down %</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.type}</td><td>${row.attempts}</td><td>${row.upDownPct}%</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -2901,12 +3006,57 @@ function sandSaveStats(sourceRounds) {
   };
 }
 
+function bunkerLeaveStats(sourceRounds) {
+  const buckets = [
+    { label: "0-3 ft", min: 0, max: 3 },
+    { label: "3-6 ft", min: 3, max: 6 },
+    { label: "6-9 ft", min: 6, max: 9 },
+    { label: "9-12 ft", min: 9, max: 12 },
+    { label: "12+ ft", min: 12, max: Infinity }
+  ];
+  const holes = sourceRounds
+    .flatMap((round) => round.holes.map(normalizeHole))
+    .filter((hole) =>
+      hole.score !== null &&
+      hole.greensideBunker === 1 &&
+      (hole.chips || 0) === 0 &&
+      Number.isFinite(hole.puttDistances?.[0])
+    );
+  return {
+    sample: holes.length,
+    averageLeave: holes.length ? `${average(holes.map((hole) => hole.puttDistances[0])).toFixed(1)} ft` : "-",
+    rows: buckets.map((bucket) => {
+      const bucketHoles = holes.filter((hole) => inBucket(hole.puttDistances[0], bucket));
+      return {
+        leave: bucket.label,
+        attempts: bucketHoles.length,
+        savePct: pct(bucketHoles.filter((hole) => hole.score <= hole.par).length, bucketHoles.length),
+        avgVsPar: bucketHoles.length ? signedNumber(average(bucketHoles.map((hole) => hole.score - hole.par))) : "-"
+      };
+    })
+  };
+}
+
+function renderBunkerLeaveTable(rows) {
+  if (!rows.some((row) => row.attempts > 0)) {
+    return `<p class="analytics-note">No single-shot bunker leaves with first putt distance recorded yet.</p>`;
+  }
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Leave distance</th><th>Attempts</th><th>Save %</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.leave}</td><td>${row.attempts}</td><td>${row.savePct}%</td><td>${row.avgVsPar}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function missedFairwayRecoveryStats(sourceRounds) {
   const holes = sourceRounds
     .flatMap((round) => round.holes.map(normalizeHole))
     .filter((hole) => hole.score !== null && hole.fairway === false);
   return [
-    { metric: "Avg score", value: average(holes.map((hole) => hole.score)).toFixed(1) },
+    { metric: "Avg vs par", value: signedNumber(average(holes.map((hole) => hole.score - hole.par))) },
     { metric: "GIR", value: `${pct(holes.filter((hole) => hole.gir).length, holes.filter((hole) => hole.gir !== null).length)}%` },
     { metric: "Scramble", value: `${pct(holes.filter(isScrambleSuccess).length, holes.filter((hole) => hole.gir === false).length)}%` }
   ];
@@ -3015,13 +3165,14 @@ function renderPuttingAnalysis(filteredRounds) {
 
 function firstPuttOutcomeCategory(hole) {
   if (!hole.putts || !Array.isArray(hole.puttDistances) || !Number.isFinite(hole.puttDistances[0])) return null;
-  if (hole.putts === 1) return "Holed first putt";
+  if (hole.putts === 1) return "Holed";
   const secondPutt = hole.puttDistances[1];
-  if (hole.putts >= 3) return "3-putt";
-  if (!Number.isFinite(secondPutt)) return "2-putt, leave unknown";
+  if (!Number.isFinite(secondPutt)) return null;
   if (secondPutt <= 3) return "Left <=3ft";
-  if (secondPutt <= 6) return "Left 4-6ft";
-  return "Left 7ft+";
+  if (secondPutt <= 6) return "Left 3-6ft";
+  if (secondPutt <= 9) return "Left 6-9ft";
+  if (secondPutt <= 12) return "Left 9-12ft";
+  return null;
 }
 
 function puttingMakeRows(sourceRounds) {
@@ -3126,6 +3277,9 @@ function renderScoringAnalysis(filteredRounds) {
     : filteredRounds.filter((round) => round.course === scoringDifficultyCourse);
   const difficultyRows = holeDifficultyRows(difficultyRounds, scoringDifficultyCourse);
   const bogey = bogeyAvoidanceStats(filteredRounds);
+  const scoringCauses = scoringCauseRows(filteredRounds);
+  const primaryCauseImpact = causeImpactRows(filteredRounds, "primary");
+  const secondaryCauseImpact = causeImpactRows(filteredRounds, "secondary");
   const blowUps = blowUpAnalysisRows(filteredRounds);
   const afterBad = scoringAfterBadHoleStats(filteredRounds);
   el.analyticsContent.innerHTML = `
@@ -3135,8 +3289,8 @@ function renderScoringAnalysis(filteredRounds) {
         <h2>Scoring Analysis</h2>
       </div>
       <div class="panel">
-        <div class="analytics-section-header"><h2>Score By Hole Par</h2><span class="analytics-note">Average scoring by par type</span></div>
-        ${renderSimpleTable(["Par", "Avg"], parRows.map((row) => [row.par, row.avg]))}
+        <div class="analytics-section-header"><h2>Score By Hole Par</h2><span class="analytics-note">Average scoring relative to par type</span></div>
+        ${renderSimpleTable(["Par", "Avg vs Par"], parRows.map((row) => [row.par, row.avgVsPar]))}
       </div>
       <div class="panel">
         <div class="analytics-section-header">
@@ -3163,15 +3317,27 @@ function renderScoringAnalysis(filteredRounds) {
         </div>
       </div>
       <div class="panel">
-        <div class="analytics-section-header"><h2>Blow-Up Hole Analysis</h2><span class="analytics-note">Double, triple, quad+ and common causes</span></div>
-        ${renderSimpleTable(["Type", "Count", "Top Cause"], blowUps.map((row) => [row.type, row.count, row.topCause]))}
+        <div class="analytics-section-header"><h2>Scoring Cause Attribution</h2><span class="analytics-note">Primary causes show the first major error; secondary causes show later problems on the same hole</span></div>
+        ${renderSimpleTable(["Score", "Count", "Top Primary", "Top Secondary"], scoringCauses.map((row) => [row.type, row.count, row.topPrimary, row.topSecondary]))}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Primary Cause Impact</h2><span class="analytics-note">Average score impact and frequency across all played holes</span></div>
+        ${renderPrimaryCauseImpactTable(primaryCauseImpact)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Secondary Cause Impact</h2><span class="analytics-note">Later problems, what they most often follow, and how often they follow that primary cause</span></div>
+        ${renderSecondaryCauseImpactTable(secondaryCauseImpact)}
+      </div>
+      <div class="panel">
+        <div class="analytics-section-header"><h2>Blow-Up Hole Analysis</h2><span class="analytics-note">Double, triple, quad+ with primary and secondary cause attribution</span></div>
+        ${renderSimpleTable(["Type", "Count", "Top Primary", "Top Secondary"], blowUps.map((row) => [row.type, row.count, row.topPrimary, row.topSecondary]))}
       </div>
       <div class="panel">
         <div class="analytics-section-header"><h2>Scoring After Bad Hole</h2><span class="analytics-note">Mental game metric after double bogey or worse</span></div>
         <div class="stats-grid">
           ${renderStatCards([
             ["Follow-up holes", afterBad.count],
-            ["Avg score vs par", afterBad.averageVsPar]
+            ["Avg vs par", afterBad.averageVsPar]
           ])}
         </div>
       </div>
@@ -3189,7 +3355,7 @@ function renderScoringAnalysis(filteredRounds) {
 function scoreByParRows(sourceRounds) {
   return [3, 4, 5].map((par) => {
     const holes = allScoredHoles(sourceRounds).filter((hole) => hole.par === par);
-    return { par: `Par ${par}`, avg: average(holes.map((hole) => hole.score)).toFixed(1) };
+    return { par: `Par ${par}`, avgVsPar: signedNumber(average(holes.map((hole) => hole.score - hole.par))) };
   });
 }
 
@@ -3206,7 +3372,6 @@ function holeDifficultyRows(sourceRounds, courseFilter = "all") {
   return Array.from(groups.entries()).map(([hole, holes]) => ({
     hole,
     rounds: holes.length,
-    avgScore: average(holes.map((item) => item.score)).toFixed(1),
     avgVsPar: signedNumber(average(holes.map((item) => item.score - item.par)))
   })).sort((a, b) => Number(b.avgVsPar) - Number(a.avgVsPar));
 }
@@ -3226,11 +3391,11 @@ function renderHoleDifficultyRanking(rows) {
     <div class="difficulty-ranking-grid">
       <div>
         <h3>Top 3 hardest</h3>
-        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], hardest.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+        ${renderSimpleTable(["Hole", "Rounds", "Avg vs Par"], hardest.map((row) => [row.hole, row.rounds, row.avgVsPar]))}
       </div>
       <div>
         <h3>Bottom 3 easiest</h3>
-        ${renderSimpleTable(["Hole", "Rounds", "Avg Score", "Avg vs Par"], easiest.map((row) => [row.hole, row.rounds, row.avgScore, row.avgVsPar]))}
+        ${renderSimpleTable(["Hole", "Rounds", "Avg vs Par"], easiest.map((row) => [row.hole, row.rounds, row.avgVsPar]))}
       </div>
     </div>
   `;
@@ -3246,6 +3411,58 @@ function bogeyAvoidanceStats(sourceRounds) {
   };
 }
 
+function scoringCauseRows(sourceRounds) {
+  const holes = allScoredHoles(sourceRounds);
+  const rows = [
+    { type: "Single bogey", holes: holes.filter((hole) => hole.score - hole.par === 1) },
+    { type: "Double bogey", holes: holes.filter((hole) => hole.score - hole.par === 2) },
+    { type: "Triple bogey+", holes: holes.filter((hole) => hole.score - hole.par >= 3) }
+  ];
+  return rows.map((row) => causeSummaryRow(row.type, row.holes));
+}
+
+function causeImpactRows(sourceRounds, type) {
+  const holes = allScoredHoles(sourceRounds).map(normalizeHole);
+  const totalHoles = holes.length;
+  const primaryCounts = causeCountRows(holes.map((hole) => hole.primaryCause).filter(Boolean));
+  const primaryCountFor = (cause) => primaryCounts.find((row) => row.cause === cause)?.count || 0;
+  const groups = new Map();
+  holes.forEach((hole) => {
+    const causes = type === "primary" ? [hole.primaryCause].filter(Boolean) : (hole.secondaryCauses || []);
+    causes.forEach((cause) => {
+      if (!groups.has(cause)) groups.set(cause, []);
+      groups.get(cause).push(hole);
+    });
+  });
+  return Array.from(groups.entries()).map(([cause, causeHoles]) => {
+    const primaryRows = type === "secondary" ? causeCountRows(causeHoles.map((hole) => hole.primaryCause).filter(Boolean)) : [];
+    const commonPrimary = primaryRows[0] || null;
+    const commonPrimaryTotal = commonPrimary ? primaryCountFor(commonPrimary.cause) : 0;
+    return {
+      cause,
+      count: causeHoles.length,
+      avgVsPar: signedNumber(average(causeHoles.map((hole) => hole.score - hole.par))),
+      frequency: `${pct(causeHoles.length, totalHoles)}%`,
+      commonPrimary: commonPrimary ? `${commonPrimary.cause} (${commonPrimary.count})` : "-",
+      followsPrimaryPct: commonPrimary ? `${pct(commonPrimary.count, commonPrimaryTotal)}%` : "-"
+    };
+  }).sort((a, b) => b.count - a.count || a.cause.localeCompare(b.cause));
+}
+
+function renderPrimaryCauseImpactTable(rows) {
+  return renderSimpleTable(
+    ["Primary cause", "Count", "Avg vs Par", "Freq of holes"],
+    rows.map((row) => [row.cause, row.count, row.avgVsPar, row.frequency])
+  );
+}
+
+function renderSecondaryCauseImpactTable(rows) {
+  return renderSimpleTable(
+    ["Secondary cause", "Count", "Avg vs Par", "Freq of holes", "Most often follows", "Follow rate"],
+    rows.map((row) => [row.cause, row.count, row.avgVsPar, row.frequency, row.commonPrimary, row.followsPrimaryPct])
+  );
+}
+
 function blowUpAnalysisRows(sourceRounds) {
   const holes = allScoredHoles(sourceRounds);
   const rows = [
@@ -3253,30 +3470,75 @@ function blowUpAnalysisRows(sourceRounds) {
     { type: "Triple+", holes: holes.filter((hole) => hole.score - hole.par >= 3) },
     { type: "Quad+", holes: holes.filter((hole) => hole.score - hole.par >= 4) }
   ];
-  return rows.map((row) => ({
-    type: row.type,
-    count: row.holes.length,
-    topCause: topBlowUpCause(row.holes)
-  }));
+  return rows.map((row) => causeSummaryRow(row.type, row.holes));
 }
 
-function topBlowUpCause(holes) {
-  const counts = new Map([
-    ["Penalty", 0],
-    ["3 putt", 0],
-    ["Missed approach", 0],
-    ["Bunker", 0],
-    ["Tee miss", 0]
-  ]);
-  holes.forEach((hole) => {
-    if ((hole.penaltyStrokes || 0) > 0) counts.set("Penalty", counts.get("Penalty") + 1);
-    if (hole.putts !== null && hole.putts >= 3) counts.set("3 putt", counts.get("3 putt") + 1);
-    if (hole.approachHit === false || hole.gir === false) counts.set("Missed approach", counts.get("Missed approach") + 1);
-    if ((hole.greensideBunker || 0) > 0 || (hole.fairwayBunker || 0) > 0) counts.set("Bunker", counts.get("Bunker") + 1);
-    if (hole.fairway === false) counts.set("Tee miss", counts.get("Tee miss") + 1);
-  });
-  const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
-  return top && top[1] ? `${top[0]} (${top[1]})` : "None logged";
+function causeSummaryRow(type, holes) {
+  const attribution = causeAttributionRows(holes);
+  return {
+    type,
+    count: holes.length,
+    topPrimary: topCauseLabel(attribution.primary, 3),
+    topSecondary: topCauseLabel(attribution.secondary, 3)
+  };
+}
+
+function causeAttributionRows(holes) {
+  const attributions = holes.map(holeCauseAttribution);
+  return {
+    primary: causeCountRows(attributions.map((item) => item.primary).filter(Boolean)),
+    secondary: causeCountRows(attributions.flatMap((item) => item.secondary))
+  };
+}
+
+function causeCountRows(causes) {
+  const counts = new Map();
+  causes.forEach((cause) => counts.set(cause, (counts.get(cause) || 0) + 1));
+  return Array.from(counts.entries())
+    .map(([cause, count]) => ({ cause, count }))
+    .sort((a, b) => b.count - a.count || a.cause.localeCompare(b.cause));
+}
+
+function topCauseLabel(rows, limit = 1) {
+  const topRows = rows.slice(0, limit);
+  return topRows.length ? topRows.map((row) => `${row.cause} (${row.count})`).join(", ") : "None logged";
+}
+
+function holeCauseAttribution(hole) {
+  const hasPenalty = (hole.penaltyStrokes || 0) > 0;
+  const hasFairwayBunker = (hole.fairwayBunker || 0) > 0;
+  const hasFairwayMiss = hole.par !== 3 && hole.fairway === false;
+  const hasMissedGir = hole.gir === false || hole.approachHit === false;
+  const hasGreensideBunker = (hole.greensideBunker || 0) > 0;
+  const hasThreePutt = hole.putts !== null && hole.putts >= 3;
+  const hasShortGameIssue = (hole.chips || 0) >= 2;
+  let primary = null;
+
+  if (hole.score === null || hole.score <= hole.par) return { primary: null, secondary: [] };
+
+  if (hasPenalty) primary = "Penalty";
+  else if (hole.gir === true && hasThreePutt) primary = "3 putt";
+  else if (hasFairwayMiss) primary = "Fairway missed";
+  else if (hasFairwayBunker) primary = "Fairway bunker";
+  else if (hasMissedGir) primary = "Missed GIR";
+  else if (hasGreensideBunker) primary = "Greenside bunker";
+  else if (hasThreePutt) primary = "3 putt";
+  else if (hasShortGameIssue) primary = "Short game";
+
+  const secondary = [];
+  const addSecondary = (cause) => {
+    if (cause !== primary && !secondary.includes(cause)) secondary.push(cause);
+  };
+
+  if (hasPenalty) addSecondary("Penalty");
+  if (hasFairwayBunker && primary !== "3 putt") addSecondary("Fairway bunker");
+  if (hasFairwayMiss && primary !== "3 putt") addSecondary("Fairway missed");
+  if (hasMissedGir && !["Penalty", "Fairway missed", "Fairway bunker"].includes(primary)) addSecondary("Missed GIR");
+  if (hasGreensideBunker) addSecondary("Greenside bunker");
+  if (hasShortGameIssue) addSecondary("Short game");
+  if (hasThreePutt) addSecondary("3 putt");
+
+  return { primary, secondary };
 }
 
 function scoringAfterBadHoleStats(sourceRounds) {
@@ -3306,8 +3568,8 @@ function renderSituationalAnalysis(filteredRounds) {
         <h2>Situational Analysis</h2>
       </div>
       <div class="panel">
-        <div class="analytics-section-header"><h2>Performance In Wind</h2><span class="analytics-note">Average adjusted score by wind speed bucket</span></div>
-        ${renderSimpleTable(["Wind", "Rounds", "Score"], windSpeedBucketRows(filteredRounds).map((row) => [row.wind, row.rounds, row.score]))}
+        <div class="analytics-section-header"><h2>Performance In Wind</h2><span class="analytics-note">Average score relative to par by wind speed bucket</span></div>
+        ${renderSimpleTable(["Wind", "Rounds", "Avg vs Par"], windSpeedBucketRows(filteredRounds).map((row) => [row.wind, row.rounds, row.avgVsPar]))}
       </div>
       <div class="chart-panel">
         <div class="analytics-section-header"><h2>Wind Strength Correlation</h2><span class="analytics-note">How wind speed relates to score</span></div>
@@ -3322,12 +3584,12 @@ function renderSituationalAnalysis(filteredRounds) {
         <div class="chart-wrap"><canvas id="windStrengthScoreChart"></canvas></div>
       </div>
       <div class="chart-panel">
-        <div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average adjusted score by wind direction</span></div>
+        <div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average score relative to par by wind direction</span></div>
         <div class="chart-wrap"><canvas id="windDirectionScoreChart"></canvas></div>
-        ${renderSimpleTable(["Direction", "Rounds", "Avg score"], windDirectionRows.map((row) => [row.direction, row.rounds, row.avgScore]))}
+        ${renderSimpleTable(["Direction", "Rounds", "Avg vs Par"], windDirectionRows.map((row) => [row.direction, row.rounds, row.avgVsPar]))}
       </div>
       <div class="panel">
-        <div class="analytics-section-header"><h2>Weather Impact</h2><span class="analytics-note">Average adjusted score by weather</span></div>
+        <div class="analytics-section-header"><h2>Weather Impact</h2><span class="analytics-note">Average score relative to par by weather</span></div>
         ${renderContextGroupTable(groupRoundsByContext(filteredRounds, "weather"), "Weather")}
       </div>
       <div class="panel">
@@ -3340,15 +3602,15 @@ function renderSituationalAnalysis(filteredRounds) {
       </div>
     </div>
   `;
-  drawScatter("windStrengthScoreChart", wind.points, "Wind speed", "Score");
-  drawBarChart("windDirectionScoreChart", windDirectionRows.map((row) => row.direction), windDirectionRows.map((row) => Number(row.avgScore)), "Avg score");
+  drawScatter("windStrengthScoreChart", wind.points, "Wind speed", "Score vs par");
+  drawBarChart("windDirectionScoreChart", windDirectionRows.map((row) => row.direction), windDirectionRows.map((row) => row.avgVsParValue), "Avg vs par");
 }
 
 function windCorrelationStats(sourceRounds) {
   const points = sourceRounds
     .map((round) => {
       const windSpeed = normalizeRoundContext(round.context).windSpeed;
-      return Number.isFinite(windSpeed) && hasRoundScore(round) ? { x: windSpeed, y: adjustedRoundScore(round) } : null;
+      return Number.isFinite(windSpeed) && hasRoundScore(round) ? { x: windSpeed, y: adjustedRoundVsPar(round) } : null;
     })
     .filter(Boolean);
   const coeff = correl(points.map((point) => point.x), points.map((point) => point.y));
@@ -3365,7 +3627,8 @@ function windDirectionScoreRows(sourceRounds) {
   return groupRoundsByContext(sourceRounds, "windDirection").map((row) => ({
     direction: row.label,
     rounds: row.rounds,
-    avgScore: row.avgScore
+    avgVsPar: row.avgVsPar,
+    avgVsParValue: row.avgVsParValue
   }));
 }
 
@@ -3380,7 +3643,7 @@ function windSpeedBucketRows(sourceRounds) {
     return {
       wind: bucket.wind,
       rounds: matching.length,
-      score: matching.length ? average(matching.map(adjustedRoundScore)).toFixed(1) : "—"
+      avgVsPar: matching.length ? signedNumber(average(matching.map(adjustedRoundVsPar))) : "—"
     };
   });
 }
@@ -3400,8 +3663,8 @@ function nutritionRows(sourceRounds) {
     return {
       food: label,
       withRounds: withFood.length,
-      withAvg: withFood.length ? average(withFood.map(adjustedRoundScore)).toFixed(1) : "—",
-      withoutAvg: withoutFood.length ? average(withoutFood.map(adjustedRoundScore)).toFixed(1) : "—"
+      withAvg: withFood.length ? signedNumber(average(withFood.map(adjustedRoundVsPar))) : "—",
+      withoutAvg: withoutFood.length ? signedNumber(average(withoutFood.map(adjustedRoundVsPar))) : "—"
     };
   }).sort((a, b) => Number(a.withAvg) - Number(b.withAvg));
 }
@@ -3409,7 +3672,7 @@ function nutritionRows(sourceRounds) {
 function renderNutritionTable(rows) {
   if (!rows.length) return `<p class="analytics-note">No food data logged yet.</p>`;
   return renderSimpleTable(
-    ["Food", "Rounds with", "With avg", "Without avg"],
+    ["Food", "Rounds with", "With avg vs par", "Without avg vs par"],
     rows.map((row) => [row.food, row.withRounds, row.withAvg, row.withoutAvg])
   );
 }
@@ -3521,14 +3784,14 @@ function approachPracticePriorities(sourceRounds) {
     if (bucketHoles.length < 5) return null;
     const girPct = pct(bucketHoles.filter((hole) => hole.gir).length, bucketHoles.length);
     const missPct = 100 - girPct;
-    const avgScore = average(bucketHoles.map((hole) => hole.score));
+    const avgVsPar = average(bucketHoles.map((hole) => hole.score - hole.par));
     const attemptsPerRound = bucketHoles.length / Math.max(sourceRounds.length, 1);
     const gap = Math.max(0, bucket.targetGir - girPct);
     const gain = roundToTenth(attemptsPerRound * (gap / 100) * 0.65);
     if (gain < 0.2) return null;
     return {
       title: `Approach shots ${bucket.label}`,
-      detail: `You miss ${missPct}% of greens and average ${avgScore.toFixed(1)} on these holes.`,
+      detail: `You miss ${missPct}% of greens and average ${signedNumber(avgVsPar)} versus par on these holes.`,
       gain
     };
   }).filter(Boolean);
@@ -3649,11 +3912,11 @@ function renderScoringDistributionTable(rows) {
 }
 
 function roundConsistencyStats(roundMetrics) {
-  const scores = roundMetrics.map((item) => item.score).filter(Number.isFinite);
-  const avg = average(scores);
-  const deviation = standardDeviation(scores);
+  const scoresVsPar = roundMetrics.map((item) => item.overPar).filter(Number.isFinite);
+  const avg = average(scoresVsPar);
+  const deviation = standardDeviation(scoresVsPar);
   return {
-    average: avg.toFixed(1),
+    average: signedNumber(avg),
     standardDeviation: deviation.toFixed(1),
     label: deviation <= 2.5 ? "Very consistent" : deviation <= 4.5 ? "Consistent" : deviation <= 6.5 ? "Variable" : "Volatile"
   };
@@ -3872,9 +4135,9 @@ function renderAnalyticsConditions(filteredRounds, roundMetrics) {
           ["Wind/score CORREL", Number.isFinite(windCoeff) ? windCoeff.toFixed(2) : "0.00"]
         ])}
       </div>
-      <div class="panel"><div class="analytics-section-header"><h2>Weather vs Score</h2><span class="analytics-note">Average adjusted score by weather</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "weather"), "Weather")}</div>
-      <div class="panel"><div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average adjusted score by wind direction</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "windDirection"), "Direction")}</div>
-      <div class="panel"><div class="analytics-section-header"><h2>Food vs Score</h2><span class="analytics-note">Average adjusted score when food was logged</span></div>${renderContextGroupTable(groupRoundsByFood(filteredRounds), "Food")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Weather vs Score</h2><span class="analytics-note">Average score relative to par by weather</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "weather"), "Weather")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Wind Direction vs Score</h2><span class="analytics-note">Average score relative to par by wind direction</span></div>${renderContextGroupTable(groupRoundsByContext(filteredRounds, "windDirection"), "Direction")}</div>
+      <div class="panel"><div class="analytics-section-header"><h2>Food vs Score</h2><span class="analytics-note">Average score relative to par when food was logged</span></div>${renderContextGroupTable(groupRoundsByFood(filteredRounds), "Food")}</div>
     </div>
   `;
 }
@@ -4327,14 +4590,14 @@ function renderApproachBucketTable(sourceRounds) {
       label: bucket.label,
       attempts: bucketHoles.length,
       hitPct: pct(bucketHoles.filter((hole) => hole.approachHit).length, bucketHoles.length),
-      avgScore: average(bucketHoles.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(bucketHoles.map((hole) => hole.score - hole.par))) ?? 0
     };
   });
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Bucket</th><th>Attempts</th><th>Hit %</th><th>Avg Score</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.attempts}</td><td>${row.hitPct}%</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Bucket</th><th>Attempts</th><th>Hit %</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.attempts}</td><td>${row.hitPct}%</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -4398,7 +4661,7 @@ function chipTypeSummary(sourceRounds) {
     return {
       label,
       count: matchingHoles.reduce((sum, hole) => sum + hole.chipTypes.filter((type) => type === key).length, 0),
-      avgScore: average(matchingHoles.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(matchingHoles.map((hole) => hole.score - hole.par))) ?? 0
     };
   });
 }
@@ -4407,8 +4670,8 @@ function renderChipTypeTable(rows) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Chip Type</th><th>Count</th><th>Avg Score on Hole</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${row.avgScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Chip Type</th><th>Count</th><th>Avg vs Par</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${row.label}</td><td>${row.count}</td><td>${signedNumber(row.avgVsPar)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -4426,7 +4689,7 @@ function renderRecoveryTable(sourceRounds) {
         <tbody>
           <tr><td>Missed GIR holes</td><td>${holes.length}</td></tr>
           <tr><td>Scramble %</td><td>${pct(scramble, holes.length)}%</td></tr>
-          <tr><td>Avg score after missed GIR</td><td>${average(holes.map((hole) => hole.score)).toFixed(1)}</td></tr>
+          <tr><td>Avg vs par after missed GIR</td><td>${signedNumber(average(holes.map((hole) => hole.score - hole.par)))}</td></tr>
           <tr><td>Avg chips after missed GIR</td><td>${avgChips}</td></tr>
           <tr><td>Avg bunker shots after missed GIR</td><td>${avgBunker}</td></tr>
         </tbody>
@@ -4533,10 +4796,11 @@ function groupRoundsByContext(sourceRounds, field) {
     .map(([label, group]) => ({
       label: formatContextLabel(label),
       rounds: group.length,
-      avgScore: average(group.map(adjustedRoundScore)).toFixed(1),
+      avgVsParValue: roundToTenth(average(group.map(adjustedRoundVsPar))) ?? 0,
+      avgVsPar: signedNumber(average(group.map(adjustedRoundVsPar))),
       bestScore: Math.min(...group.map(adjustedRoundScore))
     }))
-    .sort((a, b) => Number(a.avgScore) - Number(b.avgScore));
+    .sort((a, b) => a.avgVsParValue - b.avgVsParValue);
 }
 
 function groupRoundsByFood(sourceRounds) {
@@ -4553,10 +4817,11 @@ function groupRoundsByFood(sourceRounds) {
     .map((group) => ({
       label: group.label,
       rounds: group.rounds.length,
-      avgScore: average(group.rounds.map(adjustedRoundScore)).toFixed(1),
+      avgVsParValue: roundToTenth(average(group.rounds.map(adjustedRoundVsPar))) ?? 0,
+      avgVsPar: signedNumber(average(group.rounds.map(adjustedRoundVsPar))),
       bestScore: Math.min(...group.rounds.map(adjustedRoundScore))
     }))
-    .sort((a, b) => Number(a.avgScore) - Number(b.avgScore));
+    .sort((a, b) => a.avgVsParValue - b.avgVsParValue);
 }
 
 function renderContextGroupTable(rows, label) {
@@ -4564,8 +4829,8 @@ function renderContextGroupTable(rows, label) {
   return `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>${label}</th><th>Rounds</th><th>Avg score</th><th>Best</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${row.rounds}</td><td>${row.avgScore}</td><td>${row.bestScore}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>${label}</th><th>Rounds</th><th>Avg vs Par</th><th>Best</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${row.rounds}</td><td>${row.avgVsPar}</td><td>${row.bestScore}</td></tr>`).join("")}</tbody>
       </table>
     </div>
   `;
@@ -4606,8 +4871,7 @@ function avgScoreVsParByCategory(sourceRounds, getCategory, minAttempts = 1) {
     .map(([category, holes]) => ({
       category,
       attempts: holes.length,
-      avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0,
-      avgScore: average(holes.map((hole) => hole.score)).toFixed(1)
+      avgVsPar: roundToTenth(average(holes.map((hole) => hole.score - hole.par))) ?? 0
     }))
     .filter((row) => row.attempts >= minAttempts)
     .sort((a, b) => b.avgVsPar - a.avgVsPar);
@@ -4615,7 +4879,7 @@ function avgScoreVsParByCategory(sourceRounds, getCategory, minAttempts = 1) {
 
 function renderCategoryScoreTable(rows, label = "Factor") {
   if (!rows.length) return `<p class="analytics-note">Not enough data yet.</p>`;
-  return renderSimpleTable([label, "Attempts", "Avg score", "Avg vs par"], rows.map((row) => [row.category, row.attempts, row.avgScore, signedNumber(row.avgVsPar)]));
+  return renderSimpleTable([label, "Attempts", "Avg vs Par"], rows.map((row) => [row.category, row.attempts, signedNumber(row.avgVsPar)]));
 }
 
 function signedNumber(value) {
@@ -4777,6 +5041,8 @@ function buildRoundsCsv(sourceRounds) {
     "greensideBunker",
     "penaltyType",
     "penaltyStrokes",
+    "primaryCause",
+    "secondaryCauses",
     "putts",
     "puttDistances"
   ];
@@ -4820,6 +5086,8 @@ function buildRoundsCsv(sourceRounds) {
       hole.greensideBunker,
       hole.penaltyType,
       hole.penaltyStrokes,
+      hole.primaryCause,
+      (hole.secondaryCauses || []).join("|"),
       hole.putts,
       (hole.puttDistances || []).join("|")
       ];
@@ -4854,7 +5122,7 @@ function formatRoundText(round) {
     `Notes: ${context.notes || "-"}`,
     "",
     "Hole-by-hole",
-    "Hole | Tee club | Approach club | Par | SI | Length | Score | Putts | Putt distances | Fairway | Approach | GIR | Chips | Fairway bunker | Greenside bunker | Penalties"
+    "Hole | Tee club | Approach club | Par | SI | Length | Score | Putts | Putt distances | Fairway | Approach | GIR | Chips | Fairway bunker | Greenside bunker | Penalties | Primary cause | Secondary causes"
   ];
   round.holes.map(normalizeHole).forEach((hole) => {
     lines.push([
@@ -4873,7 +5141,9 @@ function formatRoundText(round) {
       displayCellValue(hole.chips),
       displayCellValue(hole.fairwayBunker),
       displayCellValue(hole.greensideBunker),
-      displayCellValue(hole.penaltyStrokes)
+      displayCellValue(hole.penaltyStrokes),
+      displayCellValue(hole.primaryCause),
+      hole.secondaryCauses?.length ? hole.secondaryCauses.join(", ") : "-"
     ].join(" | "));
   });
   return lines.join("\n");
@@ -5025,6 +5295,11 @@ function roundEighteenHoleScale(round) {
 
 function adjustedRoundScore(round) {
   return totalScore(round) * roundEighteenHoleScale(round);
+}
+
+function adjustedRoundVsPar(round) {
+  const scale = roundEighteenHoleScale(round);
+  return adjustedRoundScore(round) - totalPar(round) * scale;
 }
 
 function totalPar(round) {
@@ -5423,7 +5698,7 @@ function normalizeProfile(rawProfile) {
 }
 
 function normalizeHole(hole) {
-  return {
+  const normalized = {
     ...hole,
     strokeIndex: hole.strokeIndex ?? null,
     length: hole.length ?? null,
@@ -5442,11 +5717,19 @@ function normalizeHole(hole) {
     fairwayBunkerEntryMode: hole.fairwayBunkerEntryMode ?? (hole.fairwayBunker !== null && ![1, 2, 3].includes(hole.fairwayBunker) ? "other" : hole.fairwayBunker !== null ? "preset" : null),
     greensideBunker: hole.greensideBunker ?? null,
     bunkerEntryMode: hole.bunkerEntryMode ?? (hole.greensideBunker !== null && ![1, 2, 3].includes(hole.greensideBunker) ? "other" : hole.greensideBunker !== null ? "preset" : null),
+    penalties: normalizePenaltyCounts(hole.penalties, hole),
     penaltyType: hole.penaltyType ?? null,
+    penaltyOtherStrokes: hole.penaltyOtherStrokes ?? null,
     penaltyStrokes: hole.penaltyStrokes ?? null,
     puttsEntryMode: hole.puttsEntryMode ?? (hole.putts !== null && ![1, 2, 3].includes(hole.putts) ? "other" : hole.putts !== null ? "preset" : null),
     putts: hole.putts ?? null,
     puttDistances: hole.puttDistances ?? []
+  };
+  const attribution = holeCauseAttribution(normalized);
+  return {
+    ...normalized,
+    primaryCause: attribution.primary,
+    secondaryCauses: attribution.secondary
   };
 }
 

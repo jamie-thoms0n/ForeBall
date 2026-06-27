@@ -281,20 +281,20 @@
                 <label for="approachDistanceInput">Approach distance attempted</label>
                 <input id="approachDistanceInput" name="approachDistance" type="number" inputmode="numeric" min="1" max="999">
               </div>
-              <fieldset>
-                <legend>GIR</legend>
-                <div class="segmented">
-                  <label><input type="radio" name="gir" value="true">Yes</label>
-                  <label><input type="radio" name="gir" value="false">No</label>
-                </div>
-              </fieldset>
+              <div>
+                <label for="approachClubSelect">Club used</label>
+                <select id="approachClubSelect">
+                  <option value="">Select club</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label for="approachClubSelect">Club used</label>
-              <select id="approachClubSelect">
-                <option value="">Select club</option>
-              </select>
-            </div>
+            <fieldset>
+              <legend>GIR</legend>
+              <div class="segmented">
+                <label><input type="radio" name="gir" value="true">Yes</label>
+                <label><input type="radio" name="gir" value="false">No</label>
+              </div>
+            </fieldset>
 
             <div class="scorecard-divider"></div>
             <h3 class="scorecard-section-title">Short game</h3>
@@ -351,8 +351,9 @@
                 <button class="secondary-action penalty-button" type="button" data-penalty-type="ob">OB</button>
                 <button class="secondary-action penalty-button" type="button" data-penalty-type="other">Other</button>
               </div>
+              <div class="penalty-count-grid hidden" id="penaltyCountFields"></div>
               <div class="hidden" id="otherPenaltyWrap">
-                <label for="otherPenaltySelect">Penalty shots</label>
+                <label for="otherPenaltySelect">Other penalty shots each time</label>
                 <select id="otherPenaltySelect">
                   <option value="">Select</option>
                   <option value="1">1</option>
@@ -412,8 +413,8 @@
             </div>
             <fieldset>
               <legend>Food during round</legend>
-              <div id="foodEntries" class="food-entry-list"></div>
               <button class="secondary-action" type="button" id="addFoodBtn">Add food</button>
+              <div id="foodEntries" class="food-entry-list"></div>
             </fieldset>
             <div>
               <label for="roundNotesInput">Notes</label>
@@ -588,6 +589,6 @@
     </div>
 
     <script src="chart.local.js"></script>
-    <script src="app.js?v=20260624-wind-fatigue-handicap-axis"></script>
+    <script src="app.js?v=20260627-food-ui-summary"></script>
   </body>
 </html>
